@@ -129,7 +129,7 @@ swdflash: $(BINDIR)/$(PROJECT).bin
 #	$(SERFLASH) -b 230400 -w $(BINDIR)/$(PROJECT).bin -g 0 /dev/tty.usbserial-*
 
 serflash: $(BINDIR)/$(PROJECT).bin
-	stm32flash -w $(BINDIR)/$(PROJECT).bin -R -i -rts,dtr,-dtr:rts,dtr,-dtr	/dev/ttyUSB*
+	stm32flash -w $(BINDIR)/$(PROJECT).bin -R -i rts,dtr,-dtr:-rts,dtr,-dtr	/dev/ttyUSB*
 
 debug: $(BINDIR)/$(PROJECT).bin
 	$(GDBPY) --command $(BASEPATH)/gdb/debug.gdb $(BINDIR)/$(PROJECT).elf

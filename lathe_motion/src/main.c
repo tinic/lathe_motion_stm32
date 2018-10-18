@@ -24,6 +24,8 @@
 #define USART_DELAY_MS      8
 #define POS_DELAY_MS		128
 
+#define PRINT_BUF_LEN 64
+
 typedef enum
 {
     led_idle = 0, led_on, led_off
@@ -49,6 +51,43 @@ volatile uint16_t       usart_delay_count   = 0;
 volatile rx_buffer_t    uart_buffer         = { {0}, 0, 0 };
 
 volatile uint16_t       pos_delay_count   = 0;
+
+
+//-----------------------------------------------------------------
+// controller state, initialized to sane values in init_constants()
+//-----------------------------------------------------------------
+
+int32_t state_steppers_sync_stop = 0;
+int32_t state_steppers_idle = 0;
+
+int32_t error_state_out_of_sync = 0;
+int32_t error_index_offset = 0;
+
+int64_t absolute_pos = 0;
+int64_t absolute_idx = 0;
+int32_t absolute_tick = 0;
+
+int32_t current_index_delta = 0;
+int32_t current_rpm = 0; 
+
+int64_t absolute_pos_start_offset = 0;
+
+int64_t stepper_actual_pos_z = 0;
+int32_t stepper_dir_z = 0;
+int32_t stepper_mul_z = 0;
+int32_t stepper_div_z = 0;
+struct libdivide_s64_t stepper_div_z_opt = { 1 };
+
+int64_t stepper_actual_pos_x = 0;
+int32_t stepper_dir_x = 0;
+int32_t stepper_mul_x = 0;
+int32_t stepper_div_x = 0;
+struct libdivide_s64_t stepper_div_x_opt = { 1 };
+
+//-----------------------------------------------------------------
+
+
+
 
 static void put_char(uint8_t byte)
 {
@@ -160,8 +199,6 @@ static int prints(char **out, const char *string, int width, int flags)
 
 	return pc;
 }
-
-#define PRINT_BUF_LEN 64
 
 static int simple_outputi(char **out, int i, int base, int sign, int width, int flags, int letbase)
 {
@@ -303,7 +340,7 @@ static int simple_printf(const char *fmt, ...)
 	return r;
 }
 
-/*static int simple_sprintf(char *buf, const char *fmt, ...)
+static int simple_sprintf(char *buf, const char *fmt, ...)
 {
 	va_list ap;
 	int r;
@@ -313,7 +350,7 @@ static int simple_printf(const char *fmt, ...)
 	va_end(ap);
 
 	return r;
-}*/
+}
 
 uint32_t rtc_get_counter_val(void)
 {
@@ -324,35 +361,19 @@ uint32_t rtc_get_counter_val(void)
 extern "C" {
 #endif  // #ifdef __cplusplus
 
-void RTC_IRQHandler(void)
+void HardFault_Handler(void)
 {
-	if(RTC->CRL & RTC_CRL_SECF){
-		GPIOC->BSRR = (1 << 7);
-		RTC->CRL &= ~RTC_CRL_SECF;
+	for (;;) {
+		LED_PORT->BSRR  = LED_RESET;
 	}
 }
 
-int32_t error_state_out_of_sync = 0;
-int32_t error_index_offset = 0;
-
-int64_t absolute_pos = 0;
-int64_t absolute_idx = 0;
-int32_t absolute_tick = 0;
-
-int32_t current_index_delta = 0;
-int32_t current_rpm = 0; 
-
-int64_t absolute_pos_start_offset = 0;
-
-int64_t stepper_actual_pos_z = 0;
-int32_t stepper_mul_z = 0;
-int32_t stepper_div_z = 0;
-struct libdivide_s64_t stepper_div_z_opt = { 0 };
-
-int64_t stepper_actual_pos_x = 0;
-int32_t stepper_mul_x = 0;
-int32_t stepper_div_x = 0;
-struct libdivide_s64_t stepper_div_x_opt = { 0 };
+void BusFault_Handler(void)
+{
+	for (;;) {
+		LED_PORT->BSRR  = LED_RESET;
+	}
+}
 
 void SysTick_Handler(void)
 {
@@ -378,7 +399,7 @@ void SysTick_Handler(void)
 		current_rpm = 60000 / current_index_delta;
 
 		int16_t cnt = TIM3->CNT;
-	    simple_printf("g: %d s: %d i: %d r: %d\n", (int32_t)(absolute_pos + cnt), (int32_t)stepper_actual_pos_z, (int32_t)absolute_idx, current_rpm);
+	    simple_printf("g: %d s: %d i: %d r: %d s: %d\n", (int32_t)(absolute_pos + cnt), (int32_t)stepper_actual_pos_z, (int32_t)absolute_idx, current_rpm, (int32_t)SystemCoreClock);
 
 		if (error_state_out_of_sync) {
 			simple_printf("error: out of sync!\n");
@@ -406,6 +427,8 @@ void USART1_IRQHandler(void)
 
 void EXTI1_IRQHandler(void)
 {
+	// Core critical section, nothing shall happen here
+	__disable_irq();
 	int16_t cnt = TIM3->CNT;
 	TIM3->CNT = 0;
 
@@ -424,9 +447,9 @@ void EXTI1_IRQHandler(void)
 	}
 
 	static int32_t last_absolute_tick = 0;
-	int32_t new_absolute_tick = absolute_tick;
-	current_index_delta = abs(new_absolute_tick - last_absolute_tick);
-	last_absolute_tick = new_absolute_tick;
+	current_index_delta = abs(absolute_tick - last_absolute_tick);
+	last_absolute_tick = absolute_tick;
+	__enable_irq();
 }
 
 void TIM2_IRQHandler(void)
@@ -434,67 +457,94 @@ void TIM2_IRQHandler(void)
 	if ((TIM2->SR & TIM_SR_UIF)) {
 		TIM2->SR &= ~(TIM_SR_UIF);
 
+		// Do nothing if we are in stop sync mode
+		if (state_steppers_sync_stop ||
+			state_steppers_idle) {
+			return;
+		}
+
 		// Protect against TIM3 IRQ race
 		__disable_irq();
 		int16_t cnt = TIM3->CNT;
 		int64_t absolute_actual_pos = absolute_pos;
 		__enable_irq();
 
-		absolute_actual_pos += cnt - absolute_pos_start_offset;
+		absolute_actual_pos +=  cnt - absolute_pos_start_offset;
 
 		static uint32_t flip_z = 0;
 		if (flip_z) {
 			int64_t stepper_target_pos_z = libdivide_s64_do(absolute_actual_pos * stepper_mul_z, &stepper_div_z_opt);
-			int32_t sdelta = (int32_t)(stepper_target_pos_z - stepper_actual_pos_z);
+			int32_t szdelta = (int32_t)(stepper_target_pos_z - stepper_actual_pos_z);
 
-			if (abs(sdelta) >= 2880) {
-				error_state_out_of_sync = sdelta;
+
+			if (abs(szdelta) >= 2880) {
+				error_state_out_of_sync = szdelta;
 			}
 
-			if (sdelta == 0) {
+			if (szdelta == 0) {
 				// nop
-			} else { 
-				if (sdelta < 0) {
-					stepper_actual_pos_z--;
+			} else if (szdelta < 0) {
+				if (stepper_dir_z != -1) {
+					stepper_dir_z = -1;
 					GPIOB->BSRR = GPIO_BSRR_BR14;
+					// wait until next cycle to do the pulse
+				} else {
+					stepper_actual_pos_z--;
+					GPIOB->BSRR = GPIO_BSRR_BS13;
+					flip_z ^= 1;
 				}
-				if (sdelta > 0) {
+			} else if (szdelta > 0) {
+				if (stepper_dir_z != +1) {
+					stepper_dir_z = +1;
+					GPIOB->BSRR = GPIO_BSRR_BS14;		
+					// wait until next cycle to do the pulse
+				} else {
+					// now do the actual pulse
 					stepper_actual_pos_z++;
-					GPIOB->BSRR = GPIO_BSRR_BS14;
+					GPIOB->BSRR = GPIO_BSRR_BS13;
+					flip_z ^= 1;
 				}
-				GPIOB->BSRR = GPIO_BSRR_BS13;
-				flip_z ^= 1;
 			}
 		} else {
-		    GPIOB->BSRR = GPIO_BSRR_BR13;
+			GPIOB->BSRR = GPIO_BSRR_BR13;
 			flip_z ^= 1;
 		}
 
 		static uint32_t flip_x = 0;
 		if (flip_x) {
 			int64_t stepper_target_pos_x = libdivide_s64_do(absolute_actual_pos * stepper_mul_x, &stepper_div_x_opt);
-			int32_t sdelta =  (int32_t)(stepper_target_pos_x - stepper_actual_pos_x);
+			int32_t sxdelta =  (int32_t)(stepper_target_pos_x - stepper_actual_pos_x);
 
-			if (abs(sdelta) >= 2880) {
-				error_state_out_of_sync = sdelta;
+			if (abs(sxdelta) >= 2880) {
+				error_state_out_of_sync = sxdelta;
 			}
 
-			if (sdelta == 0) {
+			if (sxdelta == 0) {
 				// nop
-			} else {
-				if (sdelta < 0) {
+			} else if (sxdelta < 0) {
+				if (stepper_dir_x != -1) {
+					stepper_dir_x = -1;
+				    GPIOB->BSRR = GPIO_BSRR_BR5;
+					// wait until next cycle to do the pulse
+				} else {
 					stepper_actual_pos_x--;
-					GPIOA->BSRR = GPIO_BSRR_BR12;
+					GPIOB->BSRR = GPIO_BSRR_BS11;
+					flip_x ^= 1;
 				}
-				if (sdelta > 0) {
+			} else if (sxdelta > 0) {
+				if (stepper_dir_x != +1) {
+					stepper_dir_x = +1;
+				    GPIOB->BSRR = GPIO_BSRR_BS5;
+					// wait until next cycle to do the pulse
+				} else {
+					// now do the actual pulse
 					stepper_actual_pos_x++;
-					GPIOA->BSRR = GPIO_BSRR_BS12;
+					GPIOB->BSRR = GPIO_BSRR_BS11;
+					flip_x ^= 1;
 				}
-				GPIOA->BSRR = GPIO_BSRR_BS11;
-				flip_x ^= 1;
 			}
 		} else {
-		    GPIOA->BSRR = GPIO_BSRR_BR11;
+			GPIOB->BSRR = GPIO_BSRR_BR11;
 			flip_x ^= 1;
 		}
 	}
@@ -502,15 +552,89 @@ void TIM2_IRQHandler(void)
 
 void TIM3_IRQHandler(void)
 {
-	TIM3->DIER = 0;
+	if ((TIM3->SR & TIM_SR_UIF)) {
+		TIM3->SR &= ~(TIM_SR_UIF);
+	}
+}
+
+void TIM4_IRQHandler(void)
+{
+	if ((TIM4->SR & TIM_SR_UIF)) {
+		TIM4->SR &= ~(TIM_SR_UIF);
+	}
 }
 
 #ifdef __cplusplus
 } // extern "C" {
 #endif  // #ifdef __cplusplus
 
+static void reset_stepper_offset_to_current_pos()
+{
+	// Protect against TIM3 IRQ race
+	__disable_irq();
+	int16_t cnt = TIM3->CNT;
+	int64_t absolute_actual_pos = absolute_pos;
+	__enable_irq();
+
+	absolute_pos_start_offset = absolute_actual_pos + cnt;
+}
+
+static void maybe_enable_steppers()
+{
+	// disable stepper if no movement in z axis requested
+	if (stepper_mul_z == 0) {
+		// Z - disable
+		GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+	} else {
+		// Z - enable
+		GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+	}
+
+	// disable stepper if no movement in x axis requested
+	if (stepper_mul_x == 0) {
+		// X - disable
+		//GPIOA->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+	} else {
+		// X - enable
+		//GPIOA->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+	}
+}
+
+static void set_stepper_sync_state(int32_t state)
+{
+	if (!state) {
+		state_steppers_sync_stop = 1;
+	} else {
+		maybe_enable_steppers();
+		// Make sure we go back into sync by resetting our offsets
+		reset_stepper_offset_to_current_pos();
+		state_steppers_sync_stop = 0;
+	}
+}
+
+static void set_stepper_idle_state(int32_t state)
+{
+	// whatever we do we go into stop sync state
+	set_stepper_sync_state(0);
+
+	if (state) {
+		// Z - disable
+	    GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+		// X - disable
+	    //GPIOA->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+		state_steppers_idle = 1;
+	} else {
+		maybe_enable_steppers();
+		state_steppers_idle = 0;
+	}
+}
+
 static void init_constants() 
 {
+	// start in stop mode
+	state_steppers_sync_stop = 1;
+	state_steppers_idle = 0;
+
 	absolute_pos = 0;
 	absolute_idx = 0;
 	absolute_tick = 0;
@@ -519,13 +643,15 @@ static void init_constants()
 	absolute_pos_start_offset = 0;
 
 	stepper_actual_pos_z = 0;
-	stepper_mul_z = 1;
-	stepper_div_z = 3;
+	stepper_dir_z = 0; // direction is undefined by default
+	stepper_mul_z = 3200 / 4;
+	stepper_div_z = 2800;
 	stepper_div_z_opt = libdivide_s64_gen(stepper_div_z);
 
 	stepper_actual_pos_x = 0;
-	stepper_mul_x = 0;
-	stepper_div_x = 1;
+	stepper_dir_x = 0; // direction is undefined by default
+	stepper_mul_x = 3200 / 4;
+	stepper_div_x = 2880;
 	stepper_div_x_opt = libdivide_s64_gen(stepper_div_x);
 }
 
@@ -588,7 +714,7 @@ static void init_usart(uint32_t baudrate)
     
     // configure NVIC
     NVIC_EnableIRQ(USART1_IRQn);
-	NVIC_SetPriority(TIM3_IRQn, 255);
+	NVIC_SetPriority(USART1_IRQn, 255);
 }
 
 static void init_qenc()
@@ -624,7 +750,7 @@ static void init_qenc()
 	TIM3->CR1  |= TIM_CR1_CEN; // turn on counter
 
     NVIC_EnableIRQ(TIM3_IRQn);
-	NVIC_SetPriority(TIM3_IRQn, 2);
+	NVIC_SetPriority(TIM3_IRQn, 3);
 
 	// setup Z/Index on pin PA1
 
@@ -637,7 +763,7 @@ static void init_qenc()
 
     // configure NVIC
     NVIC_EnableIRQ(EXTI1_IRQn);
-	NVIC_SetPriority(EXTI1_IRQn, 0); // highest priority in system
+	NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
 }
 
 static void init_stepper_pins()
@@ -660,35 +786,49 @@ static void init_stepper_pins()
     GPIOB->BSRR = GPIO_BSRR_BS14;
 
 	// X - enable
-	GPIOA->CRH &= ~(GPIO_CRH_MODE15 | GPIO_CRH_CNF15);
-    GPIOA->CRH |= GPIO_CRH_MODE15_1 | GPIO_CRH_MODE15_0;
-    GPIOA->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+	GPIOB->CRH &= ~(GPIO_CRH_MODE15 | GPIO_CRH_CNF15);
+    GPIOB->CRH |= GPIO_CRH_MODE15_1 | GPIO_CRH_MODE15_0;
+    GPIOB->BSRR = GPIO_BSRR_BR15; // set to low enables driver
 
 	// X - pulse/step
-	GPIOA->CRH &= ~(GPIO_CRH_MODE11 | GPIO_CRH_CNF11);
-    GPIOA->CRH |= GPIO_CRH_MODE11_1 | GPIO_CRH_MODE11_0;
-    GPIOA->BSRR = GPIO_BSRR_BS11;
+	GPIOB->CRH &= ~(GPIO_CRH_MODE11 | GPIO_CRH_CNF11);
+    GPIOB->CRH |= GPIO_CRH_MODE11_1 | GPIO_CRH_MODE11_0;
+    GPIOB->BSRR = GPIO_BSRR_BS11;
 
 	// X - dir
-	GPIOA->CRH &= ~(GPIO_CRH_MODE12 | GPIO_CRH_CNF12);
-    GPIOA->CRH |= GPIO_CRH_MODE12_1 | GPIO_CRH_MODE12_0;
-    GPIOA->BSRR = GPIO_BSRR_BS12;
-
+	GPIOB->CRL &= ~(GPIO_CRL_MODE5 | GPIO_CRL_CNF5);
+    GPIOB->CRL |= GPIO_CRL_MODE5_1 | GPIO_CRL_MODE5_0;
+    GPIOB->BSRR = GPIO_BSRR_BS5;
 }
 
-static void init_step_timer()
+static void init_stepper_sync_timer()
 {
 	RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;  // enable TIM3 clock
 
     TIM2->CR1 |= TIM_CR1_ARPE | TIM_CR1_URS;
     TIM2->PSC = 1;
-    TIM2->ARR = 300; // This seems to be working at 1200rpm and 1:1 ratio
+    TIM2->ARR = 500; // This seems to be working fine at 1200rpm and 1:1 ratio
     TIM2->DIER |= TIM_DIER_UIE;
     TIM2->EGR = TIM_EGR_UG; // Generate Update Event to copy ARR to its shadow
     TIM2->CR1 |= TIM_CR1_CEN;
 
     NVIC_EnableIRQ(TIM2_IRQn);
 	NVIC_SetPriority(TIM2_IRQn, 1); // second highest priority in system
+}
+
+static void init_jog_timer()
+{
+	RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;  // enable TIM3 clock
+
+    TIM4->CR1 |= TIM_CR1_ARPE | TIM_CR1_URS;
+    TIM4->PSC = 1;
+    TIM4->ARR = 32768;
+    TIM4->DIER |= TIM_DIER_UIE;
+    TIM4->EGR = TIM_EGR_UG; // Generate Update Event to copy ARR to its shadow
+    TIM4->CR1 |= TIM_CR1_CEN;
+
+    NVIC_EnableIRQ(TIM4_IRQn);
+	NVIC_SetPriority(TIM4_IRQn, 2); // third highest priority in system
 }
 
 static void init_hardware(void)
@@ -700,7 +840,10 @@ static void init_hardware(void)
     init_systick();
 	init_qenc();
 	init_stepper_pins();
-	init_step_timer();
+	init_stepper_sync_timer();
+	init_jog_timer();
+
+	set_stepper_sync_state(1);
 }
 
 static void led_heartbeat(void)
@@ -727,13 +870,12 @@ static void led_heartbeat(void)
 int main(void) 
 {
     init_hardware();
-    put_char('\n');
-
-    while (1) {
-        led_heartbeat();
+	volatile int32_t d=0;    
+	int32_t c=0;
+	while (1) {
+		led_heartbeat();
 		__WFI();
     }
-    
     return 0;
 }
 
