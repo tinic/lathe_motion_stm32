@@ -45,7 +45,7 @@ INCDIR = include
 ##### C and ASM source files
 #####
 
-SRC = $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(DEVICESRC)/*.cpp)
+CPPSRC = $(wildcard $(SRCDIR)/*.cpp) $(wildcard $(DEVICESRC)/*.cpp)
 SRC = $(wildcard $(SRCDIR)/*.c) $(wildcard $(DEVICESRC)/*.c)
 ASM = $(wildcard $(SRCDIR)/*.s) $(DEVICESRC)/$(DEVICESTARTUP)
 
@@ -63,8 +63,7 @@ INCLUDE += -I$(DEVICEINC)
 ##### compiler flags
 #####
 
-CFLAGS   = -std=c99 
-CFLAGS	+= -Os 
+CFLAGS   = -Os 
 CFLAGS	+= -Wall 
 CFLAGS	+= -fno-common 
 CFLAGS	+= -mthumb 
@@ -73,6 +72,10 @@ CFLAGS	+= -D$(STM32MCU)
 CFLAGS	+= -g 
 CFLAGS	+= -Wa,-ahlms=$(addprefix $(OBJDIR)/,$(notdir $(<:.c=.lst)))
 CFLAGS	+= $(INCLUDE)
+
+CXXFLAGS  = -fno-exceptions
+CXXFLAGS += -fno-rtti
+CXXFLAGS += -nostdlib
 
 ################################################################################
 #####
@@ -115,8 +118,8 @@ RM 				= rm -rf
 
 ## Build process
 
-OBJ := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.cpp=.o)))
-OBJ := $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
+OBJ := $(addprefix $(OBJDIR)/,$(notdir $(CPPSRC:.cpp=.o)))
+OBJ += $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
 OBJ += $(addprefix $(OBJDIR)/,$(notdir $(ASM:.s=.o)))
 
 all: $(BINDIR)/$(PROJECT).bin
@@ -148,7 +151,7 @@ clean:
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.cpp
 	@mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -c $< -o $@
+	$(CC) $(CFLAGS) $(CXXFLAGS) -c $< -o $@
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c
 	@mkdir -p $(dir $@)
@@ -166,7 +169,6 @@ $(OBJDIR)/%.o: $(SRCDIR)/%.s
 $(OBJDIR)/%.o: $(DEVICESRC)/%.cpp
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
-
 
 $(OBJDIR)/%.o: $(DEVICESRC)/%.c
 	@mkdir -p $(dir $@)
