@@ -57,9 +57,6 @@ volatile uint16_t       pos_delay_count   = 0;
 // controller state, initialized to sane values in init_constants()
 //-----------------------------------------------------------------
 
-static int32_t state_steppers_sync_stop = 0;
-static int32_t state_steppers_idle = 0;
-
 static int32_t error_state_out_of_sync = 0;
 static int32_t error_index_offset = 0;
 
@@ -70,19 +67,46 @@ static int32_t absolute_tick = 0;
 static int32_t current_index_delta = 0;
 static int32_t current_rpm = 0; 
 
+static int32_t wait_for_index_zero = 0;
+static int32_t index_zero_occured = 0;
+
 static int64_t absolute_pos_start_offset = 0;
 
 static int64_t stepper_actual_pos_z = 0;
 static int32_t stepper_dir_z = 0;
-static int32_t stepper_mul_z = 0;
-static int32_t stepper_div_z = 0;
-static libdivide::libdivide_s64_t stepper_div_z_opt;
+
+static int32_t stepper_follow_mul_z = 0;
+static int32_t stepper_follow_div_z = 0;
+static libdivide::libdivide_s64_t stepper_follow_div_z_opt;
+
+static int32_t stepper_jog_dir_z = 0;
+static int32_t stepper_jog_tck_z = 0;
+static int32_t stepper_jog_tim_z = 0;
 
 static int64_t stepper_actual_pos_x = 0;
 static int32_t stepper_dir_x = 0;
-static int32_t stepper_mul_x = 0;
-static int32_t stepper_div_x = 0;
-static libdivide::libdivide_s64_t stepper_div_x_opt;
+
+static int32_t stepper_follow_mul_x = 0;
+static int32_t stepper_follow_div_x = 0;
+static libdivide::libdivide_s64_t stepper_follow_div_x_opt;
+
+static int32_t stepper_jog_dir_x = 0;
+static int32_t stepper_jog_tck_x = 0;
+static int32_t stepper_jog_tim_x = 0;
+
+enum run_mode {
+	run_mode_none,
+	
+	run_mode_follow_z,
+	run_mode_follow_x,
+	run_mode_follow_zx,
+	
+	run_mode_jog_z,
+	run_mode_jog_x,
+	run_mode_jog_zx
+};
+
+static run_mode current_run_mode = run_mode_follow_zx;
 
 //-----------------------------------------------------------------
 
@@ -93,20 +117,6 @@ static void put_char(uint8_t byte)
     }
     USART1->DR = (int)(byte);
     while (!(USART1->SR & USART_SR_TXE));
-}
-
-static int put_line(const char *string)
-{
-    int count = 0;
-    
-    while(*string) {
-        put_char(*string);
-        string++;
-        count++;
-    }
-    put_char('\n');
-    
-    return(count);
 }
 
 static void buffer_char(uint8_t c)
@@ -133,19 +143,87 @@ static uint8_t get_char(uint8_t *c)
     return 1;
 }
 
-static void echo(void)
-{
-    uint8_t in_char;
+static void set_current_run_mode(run_mode run_mode);
 
-    if(get_char(&in_char))
-    {
+static void parse(void) {
+	static char buffer[256];
+	static int32_t buffer_pos = 0;
+
+    uint8_t in_char;
+    if(get_char(&in_char)) {
         switch(in_char)
         {
-            case 0x0D:
-                put_char('\n');
-                break;
-            default:
-                put_char(in_char);
+            case 0x0D: {
+            		switch(buffer[0]) {
+            			case	'F': {
+            						if (buffer_pos > 1) switch (buffer[1]) {	
+            							case	'X': {
+            										set_current_run_mode(run_mode_follow_x);
+            									} break;
+            							case	'Z': {
+            										set_current_run_mode(run_mode_follow_z);
+            									} break;
+            							case	'B': {
+            										set_current_run_mode(run_mode_follow_zx);
+            									} break;
+            						}
+            					} break;
+            			case	'J': {
+            						if (buffer_pos > 1) switch (buffer[1]) {	
+            							case	'X': {
+													if (buffer_pos > 2) switch (buffer[2]) {
+														case	'F': {
+																	stepper_jog_dir_x = +1;
+																}break;
+														case	'R': {
+																	stepper_jog_dir_x = -1;
+																}break;
+													}
+            										set_current_run_mode(run_mode_jog_x);
+            									} break;
+            							case	'Z': {
+													if (buffer_pos > 2) switch (buffer[2]) {
+														case	'F': {
+																	stepper_jog_dir_z = +1;
+																}break;
+														case	'R': {
+																	stepper_jog_dir_z = -1;
+																}break;
+													}
+            										set_current_run_mode(run_mode_jog_z);
+            									} break;
+            							case	'B': {
+													if (buffer_pos > 2) switch (buffer[2]) {
+														case	'F': {
+																	stepper_jog_dir_z = +1;
+																}break;
+														case	'R': {
+																	stepper_jog_dir_z = -1;
+																}break;
+													}
+													if (buffer_pos > 2) switch (buffer[3]) {
+														case	'F': {
+																	stepper_jog_dir_x = +1;
+																}break;
+														case	'R': {
+																	stepper_jog_dir_x = -1;
+																}break;
+													}
+            										set_current_run_mode(run_mode_jog_zx);
+            									} break;
+            						}
+            					} break;
+            			case	'N': {
+									set_current_run_mode(run_mode_none);
+            					} break;
+            		}
+            		buffer_pos = 0;
+                } break;
+            default: {
+					if (buffer_pos < 255 ) {
+						buffer[buffer_pos++] = in_char;
+					}
+                } break;
         }
     }
 }
@@ -337,23 +415,6 @@ static int simple_printf(const char *fmt, ...)
 	return r;
 }
 
-static int simple_sprintf(char *buf, const char *fmt, ...)
-{
-	va_list ap;
-	int r;
-
-	va_start(ap, fmt);
-	r = simple_vsprintf(&buf, fmt, ap);
-	va_end(ap);
-
-	return r;
-}
-
-static uint32_t rtc_get_counter_val(void)
-{
-    return (RTC->CNTH << 16) | RTC->CNTL;
-}
-
 #ifdef __cplusplus
 extern "C" {
 #endif  // #ifdef __cplusplus
@@ -375,8 +436,8 @@ void BusFault_Handler(void)
 void SysTick_Handler(void)
 {
 	absolute_tick++;
-
-	echo();
+	
+	parse();
 
     // update heartbeat LED delay counter and toggle state when needed
     led_delay_count = ( (led_delay_count + 1) % LED_DELAY_MS );
@@ -442,6 +503,10 @@ void EXTI1_IRQHandler(void)
 		cnt != 2880 && cnt != -2880) {
 		error_index_offset = (int32_t)cnt;
 	}
+	
+	if (cnt == 2880 || cnt == -2880) {
+		index_zero_occured = 1;
+	}
 
 	static int32_t last_absolute_tick = 0;
 	current_index_delta = abs(absolute_tick - last_absolute_tick);
@@ -455,24 +520,59 @@ void TIM2_IRQHandler(void)
 		TIM2->SR &= ~(TIM_SR_UIF);
 
 		// Do nothing if we are in stop sync mode
-		if (state_steppers_sync_stop ||
-			state_steppers_idle) {
+		if (current_run_mode == run_mode_none) {
 			return;
 		}
-
+		
 		// Protect against TIM3 IRQ race
 		__disable_irq();
 		int16_t cnt = TIM3->CNT;
 		int64_t absolute_actual_pos = absolute_pos;
 		__enable_irq();
 
-		absolute_actual_pos +=  cnt - absolute_pos_start_offset;
+		absolute_actual_pos += cnt - absolute_pos_start_offset;
+
+		if (wait_for_index_zero) {
+			if (index_zero_occured) {
+				wait_for_index_zero = 0;
+				absolute_pos_start_offset = absolute_actual_pos - cnt;
+			} else {
+				// Do nothing until we hit index zero
+				return;
+			}
+		}
 
 		static uint32_t flip_z = 0;
 		if (flip_z) {
-			int64_t stepper_target_pos_z = libdivide::libdivide_s64_do(absolute_actual_pos * stepper_mul_z, &stepper_div_z_opt);
-			int32_t szdelta = (int32_t)(stepper_target_pos_z - stepper_actual_pos_z);
 
+			// by default, don't move
+			int64_t stepper_target_pos_z = stepper_actual_pos_z;
+
+			switch (current_run_mode) {
+				case	run_mode_follow_zx:
+				case	run_mode_follow_z: {
+							stepper_target_pos_z = libdivide::libdivide_s64_do(absolute_actual_pos * stepper_follow_mul_z, &stepper_follow_div_z_opt);
+						} break;
+				case	run_mode_jog_zx:	
+				case	run_mode_jog_z:	{
+							stepper_target_pos_z = stepper_actual_pos_z;
+							if (--stepper_jog_tck_z <= 0) {
+								// Reset
+								stepper_jog_tck_z = stepper_jog_tim_z;
+								// Advance
+								if (stepper_jog_dir_z < 0) {
+									stepper_target_pos_z --;
+								}
+								if (stepper_jog_dir_z > 0) {
+									stepper_target_pos_z ++;
+								}
+							}
+						} break;
+				default: {
+						} break;
+			}
+			
+			int32_t szdelta = (int32_t)(stepper_target_pos_z - stepper_actual_pos_z);
 
 			if (abs(szdelta) >= 2880) {
 				error_state_out_of_sync = szdelta;
@@ -509,7 +609,31 @@ void TIM2_IRQHandler(void)
 
 		static uint32_t flip_x = 0;
 		if (flip_x) {
-			int64_t stepper_target_pos_x = libdivide::libdivide_s64_do(absolute_actual_pos * stepper_mul_x, &stepper_div_x_opt);
+			int64_t stepper_target_pos_x = stepper_actual_pos_x;
+			
+			switch (current_run_mode) {
+				case	run_mode_follow_zx:
+				case	run_mode_follow_x: {
+							stepper_target_pos_x = libdivide::libdivide_s64_do(absolute_actual_pos * stepper_follow_mul_x, &stepper_follow_div_x_opt);
+						} break;
+				case	run_mode_jog_zx:	
+				case	run_mode_jog_x:	{
+							if (--stepper_jog_tck_x <= 0) {
+								// Reset
+								stepper_jog_tck_x = stepper_jog_tim_x;
+								// Advance
+								if (stepper_jog_dir_x < 0) {
+									stepper_target_pos_x --;
+								}
+								if (stepper_jog_dir_x > 0) {
+									stepper_target_pos_x ++;
+								}
+							}
+						} break;
+				default: {
+						} break;
+			}
+
 			int32_t sxdelta =  (int32_t)(stepper_target_pos_x - stepper_actual_pos_x);
 
 			if (abs(sxdelta) >= 2880) {
@@ -573,65 +697,60 @@ static void reset_stepper_offset_to_current_pos()
 	int64_t absolute_actual_pos = absolute_pos;
 	__enable_irq();
 
-	absolute_pos_start_offset = absolute_actual_pos + cnt;
+	absolute_pos_start_offset = absolute_actual_pos - cnt;
 }
 
 static void maybe_enable_steppers()
 {
-	// disable stepper if no movement in z axis requested
-	if (stepper_mul_z == 0) {
-		// Z - disable
+	if (current_run_mode == run_mode_none) {
+		// Z axis
 		GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
-	} else {
-		// Z - enable
-		GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+		// X axis
+		GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+		return;
 	}
 
-	// disable stepper if no movement in x axis requested
-	if (stepper_mul_x == 0) {
-		// X - disable
-		//GPIOA->BSRR = GPIO_BSRR_BS15; // set to high disables driver
-	} else {
-		// X - enable
-		//GPIOA->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+	switch (current_run_mode) {
+		case	run_mode_follow_z: {
+					// X axis
+					GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+					// Z axis
+					GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+				} break;
+		case	run_mode_follow_x: {
+					// Z axis
+					GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+					// X axis
+					GPIOB->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+				} break;
+		default: {
+					// X axis
+					GPIOB->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+					// Z axis
+					GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+				} break;
 	}
 }
 
-static void set_stepper_sync_state(int32_t state)
+static void set_current_run_mode(run_mode mode)
 {
-	if (!state) {
-		state_steppers_sync_stop = 1;
-	} else {
-		maybe_enable_steppers();
-		// Make sure we go back into sync by resetting our offsets
-		reset_stepper_offset_to_current_pos();
-		state_steppers_sync_stop = 0;
+	reset_stepper_offset_to_current_pos();
+	current_run_mode = mode;
+	switch (current_run_mode) {
+		case	run_mode_follow_zx: 
+		case	run_mode_follow_z: 
+		case	run_mode_follow_x: {
+					wait_for_index_zero = 1;
+					index_zero_occured = 0;
+				} break;
+		default: {
+				} break;
 	}
-}
-
-static void set_stepper_idle_state(int32_t state)
-{
-	// whatever we do we go into stop sync state
-	set_stepper_sync_state(0);
-
-	if (state) {
-		// Z - disable
-	    GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
-		// X - disable
-	    //GPIOA->BSRR = GPIO_BSRR_BS15; // set to high disables driver
-		state_steppers_idle = 1;
-	} else {
-		maybe_enable_steppers();
-		state_steppers_idle = 0;
-	}
+	maybe_enable_steppers();
 }
 
 static void init_constants() 
 {
-	// start in stop mode
-	state_steppers_sync_stop = 1;
-	state_steppers_idle = 0;
-
 	absolute_pos = 0;
 	absolute_idx = 0;
 	absolute_tick = 0;
@@ -641,15 +760,27 @@ static void init_constants()
 
 	stepper_actual_pos_z = 0;
 	stepper_dir_z = 0; // direction is undefined by default
-	stepper_mul_z = 3200 / 4;
-	stepper_div_z = 2800;
-	stepper_div_z_opt = libdivide::libdivide_s64_gen(stepper_div_z);
+	
+	stepper_follow_mul_z = 3200 / 4;
+	stepper_follow_div_z = 2800;
+	stepper_follow_div_z_opt = libdivide::libdivide_s64_gen(stepper_follow_div_z);
+	
+	stepper_jog_dir_z = 0; // direction is undefined by default
+	stepper_jog_tck_z = 100;
+	stepper_jog_tim_z = 100;
 
 	stepper_actual_pos_x = 0;
 	stepper_dir_x = 0; // direction is undefined by default
-	stepper_mul_x = 3200 / 4;
-	stepper_div_x = 2880;
-	stepper_div_x_opt = libdivide::libdivide_s64_gen(stepper_div_x);
+	
+	stepper_follow_mul_x = 3200 / 4;
+	stepper_follow_div_x = 2880;
+	stepper_follow_div_x_opt = libdivide::libdivide_s64_gen(stepper_follow_div_x);
+
+	stepper_jog_dir_x = 0; // direction is undefined by default
+	stepper_jog_tck_x = 100;
+	stepper_jog_tim_x = 100;
+	
+	set_current_run_mode(run_mode_follow_z);
 }
 
 static void init_systick(void)
@@ -839,8 +970,6 @@ static void init_hardware(void)
 	init_stepper_pins();
 	init_stepper_sync_timer();
 	init_jog_timer();
-
-	set_stepper_sync_state(1);
 }
 
 static void led_heartbeat(void)
