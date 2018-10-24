@@ -9,7 +9,7 @@
 #####				  st-flash, stm32flash, stm32loader, openocd, etc.
 #####
 
-BUILDTOOLPATH	= /usr/bin
+BUILDTOOLPATH	= /usr/local/bin
 FLASHTOOLPATH	= /usr/local/bin
 
 ################################################################################
@@ -63,9 +63,9 @@ INCLUDE += -I$(DEVICEINC)
 ##### compiler flags
 #####
 
-CFLAGS   = -Os 
-#Broken in gcc-7.3.1 for cortex-m3 targets
-#CFLAGS  += -flto
+CFLAGS   = -Ofast
+# https://bugs.launchpad.net/gcc-arm-embedded/+bug/1747966
+CFLAGS  += -flto -fno-function-sections -fno-data-sections
 CFLAGS	+= -Wall 
 CFLAGS	+= -fno-common 
 CFLAGS	+= -mthumb 
@@ -85,8 +85,7 @@ CXXFLAGS += -fno-rtti
 #####
 
 LDFLAGS  = -T$(DEVICELINKER)
-#Broken in gcc-7.3.1 for cortex-m3 targets
-#LDFLAGS += -flto
+LDFLAGS += -flto -fno-function-sections -fno-data-sections
 LDFLAGS	+= -mthumb 
 LDFLAGS	+= -mcpu=$(ARMCPU)
 #LDFLAGS	+= -specs=rdimon.specs
@@ -123,9 +122,9 @@ RM 				= rm -rf
 
 ## Build process
 
-OBJ := $(addprefix $(OBJDIR)/,$(notdir $(CPPSRC:.cpp=.o)))
+OBJ := $(addprefix $(OBJDIR)/,$(notdir $(ASM:.s=.o)))
+OBJ += $(addprefix $(OBJDIR)/,$(notdir $(CPPSRC:.cpp=.o)))
 OBJ += $(addprefix $(OBJDIR)/,$(notdir $(SRC:.c=.o)))
-OBJ += $(addprefix $(OBJDIR)/,$(notdir $(ASM:.s=.o)))
 
 all: $(BINDIR)/$(PROJECT).bin
 
@@ -197,6 +196,5 @@ $(BINDIR)/$(PROJECT).bin: $(BINDIR)/$(PROJECT).elf
 $(BINDIR)/$(PROJECT).elf: $(OBJ)
 	@mkdir -p $(dir $@)
 	$(CC) $(OBJ) $(LDFLAGS) -o $(BINDIR)/$(PROJECT).elf
-	$(OBJDUMP) -D $(BINDIR)/$(PROJECT).elf > $(BINDIR)/$(PROJECT).lst
+	$(OBJDUMP) -d $(BINDIR)/$(PROJECT).elf > $(BINDIR)/$(PROJECT).lst
 	$(SIZE) $(BINDIR)/$(PROJECT).elf	
-
