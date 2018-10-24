@@ -9,7 +9,7 @@
 #####				  st-flash, stm32flash, stm32loader, openocd, etc.
 #####
 
-BUILDTOOLPATH	= /usr/local/bin
+BUILDTOOLPATH	= /usr/bin
 FLASHTOOLPATH	= /usr/local/bin
 
 ################################################################################
@@ -64,6 +64,8 @@ INCLUDE += -I$(DEVICEINC)
 #####
 
 CFLAGS   = -Os 
+#Broken in gcc-7.3.1 for cortex-m3 targets
+#CFLAGS  += -flto
 CFLAGS	+= -Wall 
 CFLAGS	+= -fno-common 
 CFLAGS	+= -mthumb 
@@ -75,7 +77,7 @@ CFLAGS	+= $(INCLUDE)
 
 CXXFLAGS  = -fno-exceptions
 CXXFLAGS += -fno-rtti
-CXXFLAGS += -nostdlib
+#CXXFLAGS += -nostdlib
 
 ################################################################################
 #####
@@ -83,12 +85,15 @@ CXXFLAGS += -nostdlib
 #####
 
 LDFLAGS  = -T$(DEVICELINKER)
+#Broken in gcc-7.3.1 for cortex-m3 targets
+#LDFLAGS += -flto
 LDFLAGS	+= -mthumb 
 LDFLAGS	+= -mcpu=$(ARMCPU)
 #LDFLAGS	+= -specs=rdimon.specs
 LDFLAGS += --specs=nosys.specs
 LDFLAGS += --specs=nano.specs
 LDFLAGS += -lc
+LDFLAGS += -lstdc++
 #LDFLAGS += -lrdimon
 
 ################################################################################
@@ -132,7 +137,7 @@ swdflash: $(BINDIR)/$(PROJECT).bin
 #	$(SERFLASH) -b 230400 -w $(BINDIR)/$(PROJECT).bin -g 0 /dev/tty.usbserial-*
 
 serflash: $(BINDIR)/$(PROJECT).bin
-	stm32flash -w $(BINDIR)/$(PROJECT).bin -R -i rts,dtr,-dtr:-rts,dtr,-dtr	/dev/ttyUSB*
+	stm32flash -w $(BINDIR)/$(PROJECT).bin -R -i rts,dtr,-dtr,:-rts,dtr,-dtr, /dev/ttyS0
 
 debug: $(BINDIR)/$(PROJECT).bin
 	$(GDBPY) --command $(BASEPATH)/gdb/debug.gdb $(BINDIR)/$(PROJECT).elf
