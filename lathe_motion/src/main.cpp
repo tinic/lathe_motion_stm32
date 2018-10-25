@@ -615,7 +615,7 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
 static void send_bad_crc_response()
 {
     std::string response = "BADCRC0000\n";
-    uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(response.c_str()), 5);
+    uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(response.c_str()), 6);
     response[sizeof(response)-5] = int2hex[((crc>>12)&0xF)];
     response[sizeof(response)-4] = int2hex[((crc>> 8)&0xF)];
     response[sizeof(response)-3] = int2hex[((crc>> 4)&0xF)];
