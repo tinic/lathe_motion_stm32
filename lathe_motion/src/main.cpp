@@ -450,28 +450,33 @@ void TIM2_IRQHandler(void)
 
         if (current_run_mode == run_mode_cycle ||
             current_run_mode == run_mode_cycle_pause) {
-            __disable_irq();
+            bool do_next_cycle_step = false;
             if (current_cycle[current_cycle_idx].target_axs == 0) {
                 if (stepper_actual_pos_z == (int64_t(current_cycle[current_cycle_idx].target_pos) + stepper_off_z)) {
                     stepper_off_z = stepper_actual_pos_z;
+                    do_next_cycle_step = true;
                 }
             }
             if (current_cycle[current_cycle_idx].target_axs == 1) {
                 if (stepper_actual_pos_x == (int64_t(current_cycle[current_cycle_idx].target_pos) + stepper_off_x)) {
                     stepper_off_x = stepper_actual_pos_x;
+                    do_next_cycle_step = true;
                 }
             }
-            absolute_pos = 0;
-            absolute_pos_start_offset = cnt;
-            current_cycle_idx++;
-            if (current_cycle_idx == current_cycle.size()) {
-                current_run_mode = run_mode_none;
+            if (do_next_cycle_step) {
+                __disable_irq();
+                absolute_pos = 0;
+                absolute_pos_start_offset = cnt;
+                current_cycle_idx++;
+                if (current_cycle_idx == current_cycle.size()) {
+                    current_run_mode = run_mode_none;
+                }
+                if (current_cycle[current_cycle_idx].wait_for_index_zero) {
+                    wait_for_index_zero = 1;
+                    index_zero_occured = 0;
+                }
+                __enable_irq();
             }
-            if (current_cycle[current_cycle_idx].wait_for_index_zero) {
-                wait_for_index_zero = 1;
-                index_zero_occured = 0;
-            }
-            __enable_irq();
         }
     }
 }

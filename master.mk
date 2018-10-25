@@ -9,7 +9,7 @@
 #####				  st-flash, stm32flash, stm32loader, openocd, etc.
 #####
 
-BUILDTOOLPATH	= /usr/local/bin
+BUILDTOOLPATH	= /usr/bin
 FLASHTOOLPATH	= /usr/local/bin
 
 ################################################################################
