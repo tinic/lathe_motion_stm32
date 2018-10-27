@@ -31,9 +31,15 @@ signals:
 private slots:
    void update();
 
-   void setZeroButtonClicked();
+   void zeroButtonClicked();
 
-   void settingsDirectionButtonToggled(bool);
+   void stopButtonToggled(bool);
+   void idleButtonToggled(bool);
+
+   void aButtonToggled(bool);
+   void xButtonToggled(bool);
+   void zButtonToggled(bool);
+   void directionButtonToggled(bool);
 
    void settingsDEGButtonToggled(bool);
    void settingsMMButtonToggled(bool);

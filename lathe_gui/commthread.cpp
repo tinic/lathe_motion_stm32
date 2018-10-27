@@ -8,7 +8,7 @@
 #include <sys/ioctl.h>
 
 #include <sstream>
-#include <iomanip>>
+#include <iomanip>
 
 static const char int2hex[]= {'0','1','2','3','4','5','6','7','8','9','A','B','C','D','E','F'};
 
@@ -65,6 +65,7 @@ std::string CommThread::read_response(int fd, bool &bad_crc)
 {
     std::string result;
     char ch = 0;
+    int32_t timeout = 10000;
     do {
         ch = 0;
         if (read(fd, &ch, 1) == 1) {
@@ -74,7 +75,8 @@ std::string CommThread::read_response(int fd, bool &bad_crc)
         } else {
             usleep(100);
         }
-        if (!keepRunning) {
+        usleep(100);
+        if (!keepRunning || (--timeout == 0)) {
             bad_crc = true;
             return "";
         }
@@ -144,39 +146,36 @@ void CommThread::run() {
 
     double oldzfeed = -1000.0;
     newzfeed = 0;
+    double oldxfeed = -1000.0;
+    newxfeed = 0;
+
+    setfollow = false;
 
     bool bad_crc = false;
 
     while (keepRunning) {
-
-        if (fabs(newzfeed - oldzfeed) > 0.00001) {
-            oldzfeed = newzfeed;
-
-            const double motor_steps_per_rev = 3200.0;
-            const double encoder_steps_per_rev = 2880.0;
-            const double lead_screw_tpi = 12.0;
-
-            int32_t mul_z = int32_t(-newzfeed * lead_screw_tpi * motor_steps_per_rev * 10.0);
-            int32_t div_z = int32_t(25.4 * encoder_steps_per_rev * 10.0);
-
-            std::stringstream ss;
-
-            ss << 'Z';
-
-            ss << std::hex;
-            ss << std::right;
-            ss << std::uppercase;
-            ss << std::setfill('0');
-
-            ss << std::setw(8);
-            ss << uint32_t(mul_z);
-            ss << std::setw(8);
-            ss << uint32_t(div_z);
-
-            std::string cmd(ss.str());
-
+        if (idle) {
+            std::string cmd("H1");
             send_command(fd, cmd);
             read_response(fd, bad_crc);
+        } else if (stop) {
+            std::string cmd("H0");
+            send_command(fd, cmd);
+            read_response(fd, bad_crc);
+        } else {
+            if (newzfeed != 0.0 && newxfeed != 0.0) {
+                std::string cmd("FB");
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
+            } else if (newzfeed != 0.0) {
+                std::string cmd("FZ");
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
+            } else {
+                std::string cmd("FX");
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
+            }
         }
 
         if (setzero) {
@@ -184,6 +183,46 @@ void CommThread::run() {
             std::string cmd("R");
             send_command(fd, cmd);
             read_response(fd, bad_crc);
+        }
+
+        if (fabs(newzfeed - oldzfeed) > 0.00001 ||
+            fabs(newxfeed - oldxfeed) > 0.00001 ) {
+
+            oldzfeed = newzfeed;
+            oldxfeed = newxfeed;
+
+            const double motor_steps_per_rev = 3200.0;
+            const double encoder_steps_per_rev = 2880.0;
+            const double lead_screw_tpi_z = 12.0;
+            const double lead_screw_tpi_x = 10.0;
+
+            int32_t mul_z = int32_t(-newzfeed * lead_screw_tpi_z * motor_steps_per_rev * 10.0);
+            int32_t div_z = int32_t(25.4 * encoder_steps_per_rev * 10.0);
+
+            int32_t mul_x = int32_t( newxfeed * lead_screw_tpi_x * motor_steps_per_rev * 10.0);
+            int32_t div_x = int32_t(25.4 * encoder_steps_per_rev * 10.0);
+
+            for (int32_t c = 0; c < 2; c++) {
+                std::stringstream ss;
+
+                ss << (c==0 ? 'Z' : 'X');
+
+                ss << std::hex;
+                ss << std::right;
+                ss << std::uppercase;
+                ss << std::setfill('0');
+
+                ss << std::setw(8);
+                ss << uint32_t(c==0 ? mul_z : mul_x);
+                ss << std::setw(8);
+                ss << uint32_t(c==0 ? div_z : div_x);
+
+                std::string cmd(ss.str());
+
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
+            }
+
         }
 
         std::string cmd("S");
@@ -215,7 +254,7 @@ void CommThread::run() {
 
         emit update();
 
-        usleep(8333);
+        usleep(16666);
     }
 }
 

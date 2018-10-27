@@ -70,6 +70,8 @@ static int32_t stepper_jog_dir_x = 0;
 static int32_t stepper_jog_tck_x = 0;
 static int32_t stepper_jog_tim_x = 0;
 
+static int32_t cycle_counter = 0;
+
 struct cycle_entry {
     int32_t target_axs;
     int32_t target_pos;
@@ -174,23 +176,31 @@ volatile rx_buffer_t uart_buffer = { { 0 }, 0, 0 };
 
 static void buffer_char(uint8_t c)
 {
+    __disable_irq();
+
     int i = (uart_buffer.head_pos + 1) % USART_BUFFER_SIZE;
     
     if (i != uart_buffer.tail_pos) {
         uart_buffer.buffer[uart_buffer.head_pos] = c;
         uart_buffer.head_pos = i;
     }
+
+    __enable_irq();
 }
 
 static uint8_t get_char(uint8_t *c)
 {
+    __disable_irq();
+
     if(uart_buffer.head_pos == uart_buffer.tail_pos) {
+        __enable_irq();
         return 0;
     }
     
     *c = uart_buffer.buffer[uart_buffer.tail_pos];
     uart_buffer.tail_pos = (uart_buffer.tail_pos + 1) % USART_BUFFER_SIZE;
     
+    __enable_irq();
     return 1;
 }
 
@@ -265,6 +275,12 @@ void EXTI1_IRQHandler(void)
     __enable_irq();
 }
 
+volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC;
+#define DEMCT_TRCENA 0x01000000
+volatile uint32_t *DWT_CONTROL = (uint32_t *)0xE0001000;
+volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
+#define CYCCNTENA (1<<0)
+
 void TIM2_IRQHandler(void)
 {
     static int32_t stepper_dir_x = 0; // direction is undefined by default
@@ -285,6 +301,10 @@ void TIM2_IRQHandler(void)
         int64_t absolute_actual_pos = absolute_pos;
 
         absolute_actual_pos += cnt - absolute_pos_start_offset;
+
+        *DEMCR |= DEMCT_TRCENA;
+        *DWT_CYCCNT = 0;
+        *DWT_CONTROL |= CYCCNTENA;
 
         if (wait_for_index_zero) {
             if (index_zero_occured && current_run_mode != run_mode_cycle_pause) {
@@ -478,6 +498,8 @@ void TIM2_IRQHandler(void)
                 __enable_irq();
             }
         }
+
+        cycle_counter = *DWT_CYCCNT;
     }
 }
 
@@ -571,25 +593,44 @@ static void maybe_enable_steppers()
 static void set_current_run_mode(run_mode mode)
 {
     if (mode != current_run_mode) {
-        set_zero_pos();
-        if (current_run_mode != run_mode_none ||
-            current_run_mode != run_mode_idle) {
-            previous_run_mode = current_run_mode;
-        }
+        __disable_irq();
+        int16_t cnt = TIM3->CNT;
+
+        stepper_off_z = stepper_actual_pos_z;
+        stepper_off_x = stepper_actual_pos_x;
+
+        absolute_pos = 0;
+        absolute_pos_start_offset = cnt;
+
         current_run_mode = mode;
+        __enable_irq();
+    }
+    switch (current_run_mode) {
+        case    run_mode_follow_z:
+        case    run_mode_follow_x: {
+                    TIM2->ARR = 500;
+                } break;
+        default: {
+                    // slow down as we now have two long divides potentially
+                    TIM2->ARR = 1000;
+                } break;
     }
     maybe_enable_steppers();
 }
 
 static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
 {
+    if (div == 0) {
+        return;
+    }
+
     __disable_irq();
 
     int16_t cnt = TIM3->CNT;
 
     if (axis == 0) {
         stepper_follow_mul_z = mul;
-        stepper_follow_div_z = div;
+        stepper_follow_div_z = (mul != 0) ? div : 1;
         stepper_follow_div_z_opt = libdivide::libdivide_s64_gen(stepper_follow_div_z);
 
         stepper_off_z = stepper_actual_pos_z;
@@ -600,7 +641,7 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
 
     if (axis == 1) {
         stepper_follow_mul_x = mul;
-        stepper_follow_div_x = div;
+        stepper_follow_div_x =(mul != 0) ? div : 1;
         stepper_follow_div_x_opt = libdivide::libdivide_s64_gen(stepper_follow_div_x);
 
         stepper_off_x = stepper_actual_pos_x;
@@ -614,97 +655,86 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
 
 static void send_bad_crc_response()
 {
-    std::string response = "BADCRC0000\n";
-    uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(response.c_str()), 6);
-    response[sizeof(response)-5] = int2hex[((crc>>12)&0xF)];
-    response[sizeof(response)-4] = int2hex[((crc>> 8)&0xF)];
-    response[sizeof(response)-3] = int2hex[((crc>> 4)&0xF)];
-    response[sizeof(response)-2] = int2hex[((crc>> 0)&0xF)];
-    for (size_t c=0; c<sizeof(response); c++) {
-        put_char(response[c]);
-    }
-}
-
-static void send_ok_response()
-{
-    std::string response = "OK0000\n";
-    uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(response.c_str()), 2);
-    response[sizeof(response)-5] = int2hex[((crc>>12)&0xF)];
-    response[sizeof(response)-4] = int2hex[((crc>> 8)&0xF)];
-    response[sizeof(response)-3] = int2hex[((crc>> 4)&0xF)];
-    response[sizeof(response)-2] = int2hex[((crc>> 0)&0xF)];
-    for (size_t c=0; c<sizeof(response); c++) {
+    const char *response = "BADCRC83AA\n";
+    for (size_t c=0; c<7; c++) {
         put_char(response[c]);
     }
 }
 
 static void send_invalid_response()
 {
-    std::string response = "INVALID0000\n";
-    uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(response.c_str()), 7);
-    response[sizeof(response)-5] = int2hex[((crc>>12)&0xF)];
-    response[sizeof(response)-4] = int2hex[((crc>> 8)&0xF)];
-    response[sizeof(response)-3] = int2hex[((crc>> 4)&0xF)];
-    response[sizeof(response)-2] = int2hex[((crc>> 0)&0xF)];
-    for (size_t c=0; c<sizeof(response); c++) {
+    const char *response = "INVALID6E66\n";
+    for (size_t c=0; c<7; c++) {
+        put_char(response[c]);
+    }
+}
+
+static void send_ok_response()
+{
+    const char *response = "OKB775\n";
+    for (size_t c=0; c<7; c++) {
         put_char(response[c]);
     }
 }
 
 static void parse(void) {
     uint8_t in_char;
-    static std::string cmd;
+    static char buf[256];
+    static size_t buf_pos = 0;
     while(get_char(&in_char)) {
         if(in_char != '\n') {
-            cmd.append(1, char(in_char));
+            buf[buf_pos++] = in_char;
+            if (buf_pos > 32) {
+                buf_pos = 0;
+                break;
+            }
         } else {
-
-            if (cmd.size()<4) {
+            if (buf_pos<4) {
                 send_bad_crc_response();
-                cmd.clear();
-                continue;
+                buf_pos = 0;
+                break;
             }
 
             const size_t size_of_crc = 4;
 
             // Check CRC16 for every command
-            const uint8_t *cmd_data = reinterpret_cast<const uint8_t *>(cmd.data());
-            uint16_t crc = CRC16(cmd_data, cmd.size() - size_of_crc);
-            if ((char(int2hex[((crc>>12)&0xF)]) != cmd_data[cmd.size()-4])||
-                (char(int2hex[((crc>> 8)&0xF)]) != cmd_data[cmd.size()-3])||
-                (char(int2hex[((crc>> 4)&0xF)]) != cmd_data[cmd.size()-2])||
-                (char(int2hex[((crc>> 0)&0xF)]) != cmd_data[cmd.size()-1])) {
+            uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(buf), buf_pos - size_of_crc);
+            if ((char(int2hex[((crc>>12)&0xF)]) != buf[buf_pos-4])||
+                (char(int2hex[((crc>> 8)&0xF)]) != buf[buf_pos-3])||
+                (char(int2hex[((crc>> 4)&0xF)]) != buf[buf_pos-2])||
+                (char(int2hex[((crc>> 0)&0xF)]) != buf[buf_pos-1])) {
                 send_bad_crc_response();
-                cmd.clear();
-                continue;
+                buf_pos = 0;
+                break;
             }
 
             // Command valid, execute
-            switch(cmd[0]) {
+            switch(buf[0]) {
 
                 // Set X/Z feed rate
                 case 'X':
                 case 'Z': {
-                            if (cmd.size() < (1 + 16 + size_of_crc)) {
+                            if (buf_pos < (1 + 16 + size_of_crc)) {
                                 send_invalid_response();
                             } else {
-                                int32_t mul = int32_t(std::stoul(cmd.substr(1,8), nullptr, 16)); // 8
-                                int32_t div = int32_t(std::stoul(cmd.substr(9,8), nullptr, 16)); // 16
-                                if (div < 0) {
+                                uint32_t mul = 0;
+                                uint32_t div = 0;
+                                sscanf(&buf[1],"%08x%08x", &mul, &div);
+                                if (div <= 0) {
                                     send_invalid_response();
                                     break;
                                 }
-                                set_follow_values(cmd[0] == 'Z' ? 0 : 1, mul, div);
+                                set_follow_values(buf[0] == 'Z' ? 0 : 1, int32_t(mul), int32_t(div));
                                 send_ok_response();
                             }
                         } break;
 
                 // Follow mode
                 case 'F': {
-                            if (cmd.size() < (1 + 1) || (cmd[1] != 'Z' && cmd[1] != 'X'  && cmd[1] != 'B')) {
+                            if (buf_pos < (1 + 1) || (buf[1] != 'Z' && buf[1] != 'X'  && buf[1] != 'B')) {
                                 send_invalid_response();
                             } else {
-                                switch(cmd[1]) {
+                                switch(buf[1]) {
                                     case    'Z': {
                                                 set_current_run_mode(run_mode_follow_z);
                                             } break;
@@ -721,10 +751,10 @@ static void parse(void) {
 
                 // Halt and Idle!
                 case 'H': {
-                            if (cmd.size() < (1 + 1) || (cmd[1] != '1' && cmd[1] != '0')) {
+                            if (buf_pos < (1 + 1) || (buf[1] != '1' && buf[1] != '0')) {
                                 send_invalid_response();
                             } else {
-                                set_current_run_mode(cmd[1] == '1' ? run_mode_idle : run_mode_none);
+                                set_current_run_mode(buf[1] == '1' ? run_mode_idle : run_mode_none);
                                 send_ok_response();
                             }
                         } break;
@@ -732,7 +762,7 @@ static void parse(void) {
                 // Run cycle
                 case 'C': {
                             // Set to none while we are parsing
-                            set_current_run_mode(run_mode_none);
+/*                            set_current_run_mode(run_mode_none);
 
                             size_t pos = 1;
                             bool ok_to_run = true;
@@ -741,14 +771,14 @@ static void parse(void) {
                             current_cycle_idx = 0;
                             current_cycle.clear();
 
-                            for ( ; pos < (cmd.size() - size_of_crc - 1) ; ) {
+                            for ( ; pos < (buf_pos - size_of_crc - 1) ; ) {
 
-                                if ((cmd.size() - size_of_crc - pos) < 49) {
+                                if ((buf_pos - size_of_crc - pos) < 49) {
                                     ok_to_run = false;
                                     break;
                                 }
                                 
-                                if (cmd[pos] != 'X' && cmd[pos] != 'Z') {
+                                if (buf[pos] != 'X' && buf[pos] != 'Z') {
                                     ok_to_run = false;
                                     break;
                                 }
@@ -803,70 +833,60 @@ static void parse(void) {
                             } else {
                                 current_cycle.clear();
                                 send_invalid_response();
-                            }
+                            }*/
                         } break;
 
                 // Pause cycle
                 case 'P': {
-                            if (cmd.size() < (1 + 1) || (cmd[1] != '1' && cmd[1] != '0') || current_run_mode != run_mode_cycle) {
+/*                            if (cmd.size() < (1 + 1) || (cmd[1] != '1' && cmd[1] != '0') || current_run_mode != run_mode_cycle) {
                                 send_invalid_response();
                             } else {
                                 set_current_run_mode(cmd[1] == '1' ? run_mode_cycle_pause : run_mode_cycle);
                                 send_ok_response();
-                            }
+                            }*/
                         } break;
                         
                 // Reset to zero
                 case 'R': {
                             set_zero_pos();
                             send_ok_response();
-                        }
+                        } break;
 
                 // Get raw status
                 case 'S': {
                             int16_t cnt = TIM3->CNT;
 
-                            std::string response;
-                            
-                            char str[32];
+                            char sts[256];
+                            size_t pos = 0;
+                            snprintf(&sts[pos], 32, "%08lX%08lX", uint32_t(uint64_t(absolute_pos + cnt  )>>32),
+                                                                  uint32_t(uint64_t(absolute_pos + cnt  ))); pos += 16; // 1
+                            snprintf(&sts[pos], 32, "%08lX%08lX", uint32_t(uint64_t(stepper_actual_pos_z + stepper_off_z)>>32),
+                                                                  uint32_t(uint64_t(stepper_actual_pos_z + stepper_off_z))); pos += 16; // 2
+                            snprintf(&sts[pos], 32, "%08lX%08lX", uint32_t(uint64_t(stepper_actual_pos_x + stepper_off_x)>>32),
+                                                                  uint32_t(uint64_t(stepper_actual_pos_x + stepper_off_x))); pos += 16; // 3
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(cnt)); pos += 8; // 4
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_idx)); pos += 8; // 5
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(current_index_delta)); pos += 8; // 6
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos_start_offset)); pos += 8; // 7
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_z)); pos += 8; // 8
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_z)); pos += 8; // 9
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_x)); pos += 8; // 10
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_x)); pos += 8; // 11
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_counter)); pos += 8; // 12
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(error_index_offset)); pos += 8; // 13
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_tick)); pos += 8; // 14
 
-                            /* broken in stdc++ which is part of gcc-7.3.1
-                            snprintf(str, 32, "%016llX", uint64_t(absolute_pos + cnt)); response.append(str); // 1
-                            snprintf(str, 32, "%016llX", uint64_t(stepper_actual_pos_z)); response.append(str); // 2
-                            snprintf(str, 32, "%016llX", uint64_t(stepper_actual_pos_x)); response.append(str); // 3
-                            */
+                            uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(sts), pos);
 
-                            snprintf(str, 32, "%08lX%08lX", uint32_t(uint64_t(absolute_pos + cnt  )>>32),
-                                                            uint32_t(uint64_t(absolute_pos + cnt  ))); response.append(str); // 1
-                            snprintf(str, 32, "%08lX%08lX", uint32_t(uint64_t(stepper_actual_pos_z)>>32),
-                                                            uint32_t(uint64_t(stepper_actual_pos_z))); response.append(str); // 2
-                            snprintf(str, 32, "%08lX%08lX", uint32_t(uint64_t(stepper_actual_pos_x)>>32),
-                                                            uint32_t(uint64_t(stepper_actual_pos_x))); response.append(str); // 3
-
-                            snprintf(str, 32, "%08lX", uint32_t(cnt)); response.append(str); // 4
-                            snprintf(str, 32, "%08lX", uint32_t(absolute_idx)); response.append(str); // 5
-                            snprintf(str, 32, "%08lX", uint32_t(current_index_delta)); response.append(str); // 6
-                            snprintf(str, 32, "%08lX", uint32_t(absolute_pos_start_offset)); response.append(str); // 7
-                            snprintf(str, 32, "%08lX", uint32_t(stepper_follow_mul_z)); response.append(str); // 8
-                            snprintf(str, 32, "%08lX", uint32_t(stepper_follow_div_z)); response.append(str); // 9
-                            snprintf(str, 32, "%08lX", uint32_t(stepper_follow_mul_x)); response.append(str); // 10
-                            snprintf(str, 32, "%08lX", uint32_t(stepper_follow_div_x)); response.append(str); // 11
-                            snprintf(str, 32, "%08lX", uint32_t(error_state_out_of_sync)); response.append(str); // 12
-                            snprintf(str, 32, "%08lX", uint32_t(error_index_offset)); response.append(str); // 13
-                            snprintf(str, 32, "%08lX", uint32_t(absolute_tick)); response.append(str); // 14
-
-                            uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(response.data()), response.size());
-
-                            response.append(1,char(int2hex[((crc>>12)&0xF)]));
-                            response.append(1,char(int2hex[((crc>> 8)&0xF)]));
-                            response.append(1,char(int2hex[((crc>> 4)&0xF)]));
-                            response.append(1,char(int2hex[((crc>> 0)&0xF)]));
-
-                            response.append(1,'\n');
+                            sts[pos++] = char(int2hex[((crc>>12)&0xF)]);
+                            sts[pos++] = char(int2hex[((crc>> 8)&0xF)]);
+                            sts[pos++] = char(int2hex[((crc>> 4)&0xF)]);
+                            sts[pos++] = char(int2hex[((crc>> 0)&0xF)]);
+                            sts[pos++] = '\n';
 
                             // Send the ascii-fied data over UART
-                            for (size_t c=0; c<response.size(); c++) {
-                                put_char(response[c]);
+                            for (size_t c=0; c<pos; c++) {
+                                put_char(sts[c]);
                             }
 
                             // Clear errors
@@ -878,8 +898,14 @@ static void parse(void) {
                                 error_index_offset = 0;
                             }
                         } break;
+
+                default: {
+                            send_invalid_response();
+                        } break;
+
             }
-            cmd.clear();
+            buf_pos = 0;
+            break;
         }
     }
 }
@@ -905,15 +931,13 @@ static void init_constants()
 
     stepper_actual_pos_x = 0;
     
-    stepper_follow_mul_x = -60; // 0.1mm/rev
+    stepper_follow_mul_x = 60 / 2; // 0.05mm/rev
     stepper_follow_div_x = 1143;
     stepper_follow_div_x_opt = libdivide::libdivide_s64_gen(stepper_follow_div_x);
 
     stepper_jog_dir_x = 0; // direction is undefined by default
     stepper_jog_tck_x = 100;
     stepper_jog_tim_x = 100;
-    
-    set_current_run_mode(run_mode_follow_z);
 }
 
 static void init_systick(void)
@@ -1108,6 +1132,7 @@ static void init_hardware(void)
 int main(void) 
 {
     init_hardware();
+    set_current_run_mode(run_mode_follow_z);
     while (1) {
         switch(led_state)
         {

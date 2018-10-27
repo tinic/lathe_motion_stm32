@@ -1,6 +1,7 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
 
+#include <math.h>
 #include <QLabel>
 
 MainWindow::MainWindow(QWidget *parent) :
@@ -17,7 +18,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
 
     updateStepValues();
-    settingsDirectionButtonToggled(true);
+    findChild<QPushButton *>("zButton")->setChecked(true);
     passToCommThread();
     untoggleButtons();
 }
@@ -49,7 +50,7 @@ void MainWindow::update()
             ((fabs(double(local_packet.stepper_actual_pos_z)) / 3200.0) / 12.0) * 25.4,
             "mm",
             local_packet.stepper_actual_pos_x < 0 ? '-' : '+',
-            ((fabs(double(local_packet.stepper_actual_pos_x)) / 3200.0) / 12.0) * 25.4,
+            ((fabs(double(local_packet.stepper_actual_pos_x)) / 3200.0) / 10.0) * 25.4,
             "mm",
             local_packet.absolute_cnt < 0 ? '-' : '+',
             ( fabs(double(local_packet.absolute_cnt)) / 2880.0) * 360,
@@ -121,10 +122,10 @@ static const double settingsValues [3][20] =
       25.4 / 10, 25.4 / 9, 25.4 / 8, 25.4 / 7,
     },
     { 1.4908,1.4287, 1.4307, 1.4377,
-      0.635, .7055555555555, .79375, 0.907,
-      1.05833333, 1.270, 1.411, 1.588,
-      1.814, 1.954, 2.117, 2.309,
-      2.540, 2.822, 3.175, 3.629,
+      1.4876, 1.5072, 1.4933, 1.4894,
+      1.789910608, 4.5, 5.625, 7.50,
+      10, 12.5, 15, 20,
+      25, 30, 35, 45,
     }
 };
 
@@ -152,13 +153,102 @@ static const char *settingsNames [3][20] =
 
 void MainWindow::passToCommThread()
 {
-    commThread.newzfeed = currentStepValue * currentDirectionValue;
-    commThread.newxfeed = 0.0;
+    QPushButton *button0 = findChild<QPushButton *>("aButton");
+    QPushButton *button1 = findChild<QPushButton *>("xButton");
+    QPushButton *button2 = findChild<QPushButton *>("zButton");
+    if (button2->isChecked()) {
+        commThread.newzfeed = currentStepValue * currentDirectionValue;
+        commThread.newxfeed = 0.0;
+        commThread.setfollow = true;
+    } else if (button1->isChecked()) {
+        commThread.newxfeed = currentStepValue * currentDirectionValue;
+        commThread.newzfeed = 0.0;
+        commThread.setfollow = true;
+    } else if (button0->isChecked()) {
+        double t = -tan((M_PI/180)*currentAngleValue);
+        commThread.newzfeed = currentStepValue * currentDirectionValue;
+        commThread.newxfeed = currentStepValue * currentDirectionValue * t;
+        commThread.setfollow = true;
+    }
 }
 
-void MainWindow::setZeroButtonClicked()
+void MainWindow::zeroButtonClicked()
 {
     commThread.setzero = true;
+}
+
+void MainWindow::stopButtonToggled(bool)
+{
+    QPushButton *button0 = findChild<QPushButton *>("idleButton");
+    QPushButton *button1 = findChild<QPushButton *>("stopButton");
+    if (!button1->isChecked()) button0->setChecked(false);
+    commThread.idle = button0->isChecked();
+    commThread.stop = button1->isChecked();
+    commThread.setfollow = true;
+}
+
+void MainWindow::idleButtonToggled(bool)
+{
+    QPushButton *button0 = findChild<QPushButton *>("idleButton");
+    QPushButton *button1 = findChild<QPushButton *>("stopButton");
+    if (button0->isChecked()) button1->setChecked(true);
+    commThread.idle = button0->isChecked();
+    commThread.stop = button1->isChecked();
+    commThread.setfollow = true;
+}
+
+void MainWindow::aButtonToggled(bool) {
+    QPushButton *button0 = findChild<QPushButton *>("aButton");
+    QPushButton *button1 = findChild<QPushButton *>("xButton");
+    QPushButton *button2 = findChild<QPushButton *>("zButton");
+    if (button0) button0->setChecked(true);
+    if (button1) button1->setChecked(false);
+    if (button2) button2->setChecked(false);
+    passToCommThread();
+    directionButtonToggled(false);
+}
+
+void MainWindow::xButtonToggled(bool) {
+    QPushButton *button0 = findChild<QPushButton *>("aButton");
+    QPushButton *button1 = findChild<QPushButton *>("xButton");
+    QPushButton *button2 = findChild<QPushButton *>("zButton");
+    if (button0) button0->setChecked(false);
+    if (button1) button1->setChecked(true);
+    if (button2) button2->setChecked(false);
+    passToCommThread();
+    directionButtonToggled(false);
+}
+
+void MainWindow::zButtonToggled(bool) {
+    QPushButton *button0 = findChild<QPushButton *>("aButton");
+    QPushButton *button1 = findChild<QPushButton *>("xButton");
+    QPushButton *button2 = findChild<QPushButton *>("zButton");
+    if (button0) button0->setChecked(false);
+    if (button1) button1->setChecked(false);
+    if (button2) button2->setChecked(true);
+    passToCommThread();
+    directionButtonToggled(false);
+}
+
+void MainWindow::directionButtonToggled(bool) {
+    QPushButton *button0 = findChild<QPushButton *>("aButton");
+    QPushButton *button1 = findChild<QPushButton *>("xButton");
+    QPushButton *button2 = findChild<QPushButton *>("zButton");
+    QPushButton *button3 = findChild<QPushButton *>("directionButton");
+
+    if (button3->isChecked()) {
+        if (button2->isChecked()) button3->setText("⮆");
+        if (button1->isChecked()) button3->setText("⮇");
+        if (button0->isChecked()) button3->setText("⇗");
+        currentDirectionValue = -1.0;
+    } else {
+        if (button2->isChecked()) button3->setText("⮄");
+        if (button1->isChecked()) button3->setText("⮅");
+        if (button0->isChecked()) button3->setText("⇙");
+        currentDirectionValue = +1.0;
+    }
+
+    passToCommThread();
 }
 
 void MainWindow::setNewButtonSetting(uint32_t buttonIdx)
@@ -207,18 +297,6 @@ void MainWindow::untoggleButtons() {
             }
         }
     }
-}
-
-void MainWindow::settingsDirectionButtonToggled(bool) {
-    QPushButton *button = findChild<QPushButton *>("setDirectionButton");
-    if (button->isChecked()) {
-        button->setText("⮆");
-        currentDirectionValue = -1.0;
-    } else {
-        button->setText("⮄");
-        currentDirectionValue = +1.0;
-    }
-    passToCommThread();
 }
 
 void MainWindow::updateStepValues() {

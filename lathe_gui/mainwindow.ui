@@ -156,7 +156,7 @@ QPushButton:pressed {
          <string notr="true"/>
         </property>
         <property name="text">
-         <string>⮆</string>
+         <string/>
         </property>
         <property name="checkable">
          <bool>true</bool>
@@ -879,7 +879,7 @@ POSX: +0000.00</string>
        </widget>
       </item>
       <item row="2" column="2">
-       <widget class="QPushButton" name="zpxpButton">
+       <widget class="QPushButton" name="aButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -893,12 +893,15 @@ POSX: +0000.00</string>
          </font>
         </property>
         <property name="text">
-         <string></string>
+         <string>∠</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
       <item row="2" column="0">
-       <widget class="QPushButton" name="zmxpButton">
+       <widget class="QPushButton" name="zButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -907,17 +910,22 @@ POSX: +0000.00</string>
         </property>
         <property name="font">
          <font>
-          <family>OpenSymbol</family>
+          <family>Lekton</family>
           <pointsize>40</pointsize>
+          <weight>75</weight>
+          <bold>true</bold>
          </font>
         </property>
         <property name="text">
-         <string></string>
+         <string>Z</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
       <item row="0" column="2">
-       <widget class="QPushButton" name="zpxmButton">
+       <widget class="QPushButton" name="xButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -926,17 +934,22 @@ POSX: +0000.00</string>
         </property>
         <property name="font">
          <font>
-          <family>OpenSymbol</family>
+          <family>Lekton</family>
           <pointsize>40</pointsize>
+          <weight>75</weight>
+          <bold>true</bold>
          </font>
         </property>
         <property name="text">
-         <string></string>
+         <string>X</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
       <item row="0" column="0">
-       <widget class="QPushButton" name="zmxmButton">
+       <widget class="QPushButton" name="directionButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -950,12 +963,15 @@ POSX: +0000.00</string>
          </font>
         </property>
         <property name="text">
-         <string></string>
+         <string>⮆</string>
+        </property>
+        <property name="checkable">
+         <bool>true</bool>
         </property>
        </widget>
       </item>
       <item row="3" column="0">
-       <widget class="QPushButton" name="directionButton">
+       <widget class="QPushButton" name="zeroButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -1000,7 +1016,7 @@ POSX: +0000.00</string>
        </widget>
       </item>
       <item row="3" column="1">
-       <widget class="QPushButton" name="axisButton">
+       <widget class="QPushButton" name="goToButton">
         <property name="sizePolicy">
          <sizepolicy hsizetype="Minimum" vsizetype="Expanding">
           <horstretch>0</horstretch>
@@ -1016,7 +1032,7 @@ POSX: +0000.00</string>
          </font>
         </property>
         <property name="text">
-         <string>Z</string>
+         <string>GOTOZ</string>
         </property>
        </widget>
       </item>
@@ -1434,34 +1450,114 @@ POSX: +0000.00</string>
    </hints>
   </connection>
   <connection>
-   <sender>setDirectionButton</sender>
-   <signal>clicked(bool)</signal>
+   <sender>zeroButton</sender>
+   <signal>clicked()</signal>
    <receiver>MainWindow</receiver>
-   <slot>settingsDirectionButtonToggled(bool)</slot>
+   <slot>zeroButtonClicked()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>424</x>
-     <y>298</y>
+     <x>648</x>
+     <y>596</y>
     </hint>
     <hint type="destinationlabel">
-     <x>553</x>
-     <y>76</y>
+     <x>561</x>
+     <y>618</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>zButton</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>zButtonToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>660</x>
+     <y>516</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>551</x>
+     <y>543</y>
     </hint>
    </hints>
   </connection>
   <connection>
    <sender>directionButton</sender>
-   <signal>clicked()</signal>
+   <signal>clicked(bool)</signal>
    <receiver>MainWindow</receiver>
-   <slot>setZeroButtonClicked()</slot>
+   <slot>directionButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>656</x>
-     <y>609</y>
+     <x>658</x>
+     <y>318</y>
     </hint>
     <hint type="destinationlabel">
-     <x>547</x>
-     <y>640</y>
+     <x>550</x>
+     <y>336</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>xButton</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>xButtonToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1019</x>
+     <y>336</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1051</x>
+     <y>236</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>aButton</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>aButtonToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>959</x>
+     <y>490</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1008</x>
+     <y>225</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>stopButton</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>stopButtonToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>834</x>
+     <y>422</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>548</x>
+     <y>418</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>idleButton</sender>
+   <signal>clicked(bool)</signal>
+   <receiver>MainWindow</receiver>
+   <slot>idleButtonToggled(bool)</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>1000</x>
+     <y>612</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>899</x>
+     <y>656</y>
     </hint>
    </hints>
   </connection>
@@ -1491,6 +1587,12 @@ POSX: +0000.00</string>
   <slot>settings20ButtonToggled(bool)</slot>
   <slot>settings12ButtonToggled(bool)</slot>
   <slot>settingsDirectionButtonToggled(bool)</slot>
-  <slot>setZeroButtonClicked()</slot>
+  <slot>zeroButtonClicked()</slot>
+  <slot>zButtonToggled(bool)</slot>
+  <slot>aButtonToggled(bool)</slot>
+  <slot>directionButtonToggled(bool)</slot>
+  <slot>xButtonToggled(bool)</slot>
+  <slot>stopButtonToggled(bool)</slot>
+  <slot>idleButtonToggled(bool)</slot>
  </slots>
 </ui>
