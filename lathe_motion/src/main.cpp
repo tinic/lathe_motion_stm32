@@ -7,9 +7,6 @@
 #include "main.h"
 #include "libdivide.h"
 
-#include <string>
-#include <vector>
-
 // led
 #define LED_DELAY_MS        128
 #define LED_PORT            GPIOC
@@ -84,9 +81,9 @@ struct cycle_entry {
     int32_t wait_for_index_zero;
 };
 
-std::vector<cycle_entry> current_cycle;
-
-size_t current_cycle_idx = 0;
+static cycle_entry current_cycle[64];
+static size_t current_cycle_idx = 0;
+static size_t current_cycle_len = 0;
 
 enum run_mode {
     run_mode_idle,
@@ -488,7 +485,7 @@ void TIM2_IRQHandler(void)
                 absolute_pos = 0;
                 absolute_pos_start_offset = cnt;
                 current_cycle_idx++;
-                if (current_cycle_idx == current_cycle.size()) {
+                if (current_cycle_idx == current_cycle_len) {
                     current_run_mode = run_mode_none;
                 }
                 if (current_cycle[current_cycle_idx].wait_for_index_zero) {
@@ -762,14 +759,14 @@ static void parse(void) {
                 // Run cycle
                 case 'C': {
                             // Set to none while we are parsing
-/*                            set_current_run_mode(run_mode_none);
+                            set_current_run_mode(run_mode_none);
 
                             size_t pos = 1;
                             bool ok_to_run = true;
                             int32_t prev_target_pos = 0;
 
+                            current_cycle_len = 0;
                             current_cycle_idx = 0;
-                            current_cycle.clear();
 
                             for ( ; pos < (buf_pos - size_of_crc - 1) ; ) {
 
@@ -784,20 +781,20 @@ static void parse(void) {
                                 }
 
                                 cycle_entry entry;
-                                entry.target_axs = (cmd[pos] == 'X') ? 1 : 0; pos++; // 1
-                                entry.target_pos = int32_t(std::stoul(cmd.substr(pos,8), nullptr, 16)); pos += 8; // 9
-                                entry.stepper_mul_z = int32_t(std::stoul(cmd.substr(pos,8), nullptr, 16)); pos += 8; // 17
-                                entry.stepper_div_z = int32_t(std::stoul(cmd.substr(pos,8), nullptr, 16)); pos += 8; // 25
-                                entry.stepper_mul_x = int32_t(std::stoul(cmd.substr(pos,8), nullptr, 16)); pos += 8; // 33
-                                entry.stepper_div_x = int32_t(std::stoul(cmd.substr(pos,8), nullptr, 16)); pos += 8; // 41
-                                entry.wait_for_index_zero = int32_t(std::stoul(cmd.substr(pos,8), nullptr, 16)); pos += 8; // 49
-                                
+                                entry.target_axs = (buf[pos] == 'X') ? 1 : 0; pos++; // 1
+								
+								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.target_pos); pos += 8;
+								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_z); pos += 8;
+								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_z); pos += 8;
+								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_x); pos += 8;
+								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_x); pos += 8;
+								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.wait_for_index_zero); pos += 8;
+
                                 entry.stepper_div_z_opt = libdivide::libdivide_s64_gen(entry.stepper_div_z);
                                 entry.stepper_div_x_opt = libdivide::libdivide_s64_gen(entry.stepper_div_x);
                                 
                                 if (entry.stepper_div_z < 0 ||
                                     entry.stepper_div_x < 0) {
-                                    current_cycle.clear();
                                     ok_to_run = false;
                                     break;
                                 }
@@ -824,26 +821,29 @@ static void parse(void) {
                                 }
                                 prev_target_pos = entry.target_pos;
                                 
-                                current_cycle.push_back(entry);
+                                current_cycle[current_cycle_idx++]= entry;
                             }
-                            
-                            if (ok_to_run && current_cycle.size() > 0) {
+							
+                            if (ok_to_run && current_cycle_idx > 0) {
+								current_cycle_len = current_cycle_idx;
+								current_cycle_idx = 0;
                                 set_current_run_mode(run_mode_cycle);
                                 send_ok_response();
                             } else {
-                                current_cycle.clear();
-                                send_invalid_response();
-                            }*/
+								current_cycle_len = 0;
+								current_cycle_idx = 0;
+								send_invalid_response();
+                            }
                         } break;
 
                 // Pause cycle
                 case 'P': {
-/*                            if (cmd.size() < (1 + 1) || (cmd[1] != '1' && cmd[1] != '0') || current_run_mode != run_mode_cycle) {
+                            if (buf_pos < (1 + 1) || (buf[1] != '1' && buf[1] != '0') || current_run_mode != run_mode_cycle) {
                                 send_invalid_response();
                             } else {
-                                set_current_run_mode(cmd[1] == '1' ? run_mode_cycle_pause : run_mode_cycle);
+                                set_current_run_mode(buf[1] == '1' ? run_mode_cycle_pause : run_mode_cycle);
                                 send_ok_response();
-                            }*/
+                            }
                         } break;
                         
                 // Reset to zero
