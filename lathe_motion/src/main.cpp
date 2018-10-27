@@ -71,7 +71,7 @@ static int32_t cycle_counter = 0;
 
 struct cycle_entry {
     int32_t target_axs;
-    int32_t target_pos;
+    int64_t target_pos;
     int32_t stepper_mul_z;
     int32_t stepper_div_z;
     libdivide::libdivide_s64_t stepper_div_z_opt;
@@ -716,7 +716,7 @@ static void parse(void) {
                             } else {
                                 uint32_t mul = 0;
                                 uint32_t div = 0;
-                                sscanf(&buf[1],"%08x%08x", &mul, &div);
+                                sscanf(&buf[1],"%08x%08x", (unsigned int *)&mul, (unsigned int *)&div);
                                 if (div <= 0) {
                                     send_invalid_response();
                                     break;
@@ -783,7 +783,10 @@ static void parse(void) {
                                 cycle_entry entry;
                                 entry.target_axs = (buf[pos] == 'X') ? 1 : 0; pos++; // 1
 								
-								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.target_pos); pos += 8;
+                                uint32_t upper;
+                                uint32_t lower;
+								sscanf(&buf[pos],"%08x%08x",(unsigned int *)&upper, (unsigned int *)&lower); pos += 16;
+                                entry.target_pos = (int64_t(upper) << 32) | int64_t(lower);
 								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_z); pos += 8;
 								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_z); pos += 8;
 								sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_x); pos += 8;
