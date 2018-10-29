@@ -96,7 +96,6 @@ enum run_mode {
     
     run_mode_jog_z,
     run_mode_jog_x,
-    run_mode_jog_zx,
     
     run_mode_cycle,
     run_mode_cycle_pause
@@ -206,6 +205,104 @@ volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
 
 static void parse(void);
 
+static struct {
+  int32_t run_state;
+  int32_t dir;
+  int32_t step_delay;
+  int32_t decel_start;
+  int32_t decel_val;
+  int32_t min_delay;
+  int32_t accel_count;
+} jog_state;
+
+enum {
+	STOP = 0,
+	ACCEL = 1,
+	DECEL = 2,
+	RUN = 3,
+};
+
+static uint32_t sqrt(uint32_t x)
+{
+	uint32_t xr;
+	uint32_t q2;
+	uint8_t f;
+	xr = 0; 
+	q2 = 0x40000000L;
+	do {
+		if((xr + q2) <= x) {
+			x -= xr + q2;
+			f = 1;
+		} else {
+			f = 0;
+		}
+		xr >>= 1;
+		if(f) {
+			xr += q2;
+		}
+	} while(q2 >>= 2);
+	if(xr < x) {
+		return xr +1;
+	} else {
+		return xr;
+	}
+}
+
+static void jog_calc_step_delay_time() {
+	int32_t new_step_delay;
+	static int32_t last_accel_delay = 0;
+	static int32_t step_count = 0;
+	static int32_t rest = 0;
+
+	switch(jog_state.run_state) {
+		case STOP: {
+				step_count = 0;
+				rest = 0;
+			} break;
+
+		case ACCEL: {
+				step_count ++;
+				jog_state.accel_count++;
+				new_step_delay = jog_state.step_delay - (((2 * (int32_t)jog_state.step_delay) + rest) / (4 * jog_state.accel_count + 1));
+				rest = ((2 * (int32_t)jog_state.step_delay)+rest) % (4 * jog_state.accel_count + 1);
+				if(step_count >= jog_state.decel_start) {
+					jog_state.accel_count = jog_state.decel_val;
+					jog_state.run_state = DECEL;
+				}
+				else if(new_step_delay <= jog_state.min_delay) {
+					last_accel_delay = new_step_delay;
+					new_step_delay = jog_state.min_delay;
+					rest = 0;
+					jog_state.run_state = RUN;
+				}
+			} break;
+
+		case RUN: {
+				step_count ++;
+				new_step_delay = jog_state.min_delay;
+				if(step_count >= jog_state.decel_start) {
+					jog_state.accel_count = jog_state.decel_val;
+					new_step_delay = last_accel_delay;
+					jog_state.run_state = DECEL;
+				}
+			} break;
+
+		case DECEL: {
+				step_count ++;
+				jog_state.accel_count++;
+				new_step_delay = jog_state.step_delay - (((2 * (int32_t)jog_state.step_delay) + rest) / (4 * jog_state.accel_count + 1));
+				rest = ((2 * (int32_t)jog_state.step_delay)+rest) % (4 * jog_state.accel_count + 1);
+				if(jog_state.accel_count >= 0){
+					jog_state.run_state = STOP;
+				}
+			} break;
+	}
+
+	TIM2->ARR = 500;
+
+	jog_state.step_delay = new_step_delay;
+}
+
 #ifdef __cplusplus
 extern "C" {
 #endif  // #ifdef __cplusplus
@@ -283,6 +380,8 @@ void TIM2_IRQHandler(void)
     if ((TIM2->SR & TIM_SR_UIF)) {
         TIM2->SR &= ~(TIM_SR_UIF);
 
+        *DWT_CYCCNT = 0;
+
         // Do nothing if we are in stop sync mode
         if (current_run_mode == run_mode_none ||
             current_run_mode == run_mode_idle) {
@@ -295,8 +394,6 @@ void TIM2_IRQHandler(void)
         int64_t absolute_actual_pos = absolute_pos;
 
         absolute_actual_pos += cnt - absolute_pos_start_offset;
-
-        *DWT_CYCCNT = 0;
 
         if (wait_for_index_zero) {
             if (index_zero_occured && current_run_mode != run_mode_cycle_pause) {
@@ -317,6 +414,7 @@ void TIM2_IRQHandler(void)
         }
         __enable_irq();
 
+
         static uint32_t flip_z = 0;
         if (flip_z) {
             // by default, don't move
@@ -328,20 +426,16 @@ void TIM2_IRQHandler(void)
                             stepper_target_pos_z = libdivide::libdivide_s64_do(absolute_actual_pos * int64_t(stepper_follow_mul_z), &stepper_follow_div_z_opt);
                             stepper_target_pos_z += stepper_off_z;
                         } break;
-                case    run_mode_jog_zx:    
                 case    run_mode_jog_z: {
-                            stepper_target_pos_z = stepper_actual_pos_z;
-                            if (--stepper_jog_tck_z <= 0) {
-                                // Reset
-                                stepper_jog_tck_z = stepper_jog_tim_z;
-                                // Advance
-                                if (stepper_jog_dir_z < 0) {
-                                    stepper_target_pos_z --;
-                                }
-                                if (stepper_jog_dir_z > 0) {
-                                    stepper_target_pos_z ++;
-                                }
-                            }
+                			jog_calc_step_delay_time();
+                			if (jog_state.run_state != STOP) {
+                				if (jog_state.dir > 0) {
+	                				stepper_target_pos_z++;
+	                			}
+                				if (jog_state.dir < 0) {
+	                				stepper_target_pos_z--;
+	                			}
+                			}
                         } break;
                 case    run_mode_cycle_pause:
                 case    run_mode_cycle: {
@@ -384,8 +478,11 @@ void TIM2_IRQHandler(void)
                     flip_z ^= 1;
                 }
             }
-            
         } else {
+			if (current_run_mode == run_mode_jog_z ||
+				current_run_mode == run_mode_jog_x) {
+				TIM2->ARR = jog_state.step_delay;
+			}
             GPIOB->BSRR = GPIO_BSRR_BR13;
             flip_z ^= 1;
         }
@@ -400,19 +497,16 @@ void TIM2_IRQHandler(void)
                             stepper_target_pos_x = libdivide::libdivide_s64_do(absolute_actual_pos * int64_t(stepper_follow_mul_x), &stepper_follow_div_x_opt);
                             stepper_target_pos_x += stepper_off_x;
                         } break;
-                case    run_mode_jog_zx:    
                 case    run_mode_jog_x: {
-                            if (--stepper_jog_tck_x <= 0) {
-                                // Reset
-                                stepper_jog_tck_x = stepper_jog_tim_x;
-                                // Advance
-                                if (stepper_jog_dir_x < 0) {
-                                    stepper_target_pos_x --;
-                                }
-                                if (stepper_jog_dir_x > 0) {
-                                    stepper_target_pos_x ++;
-                                }
-                            }
+                			jog_calc_step_delay_time();
+                			if (jog_state.run_state != STOP) {
+                				if (jog_state.dir > 0) {
+	                				stepper_target_pos_x++;
+	                			}
+                				if (jog_state.dir < 0) {
+	                				stepper_target_pos_x--;
+	                			}
+                			}
                         } break;
                 case    run_mode_cycle_pause:
                 case    run_mode_cycle: {
@@ -456,6 +550,10 @@ void TIM2_IRQHandler(void)
                 }
             }
         } else {
+			if (current_run_mode == run_mode_jog_z ||
+				current_run_mode == run_mode_jog_x) {
+				TIM2->ARR = jog_state.step_delay;
+			}
             GPIOB->BSRR = GPIO_BSRR_BR11;
             flip_x ^= 1;
         }
@@ -750,6 +848,80 @@ static void parse(void) {
                                 send_ok_response();
                             }
                         } break;
+                        
+                case 'J': {
+                            if (buf_pos < (1 + 1 + 32) || (buf[1] != 'Z' && buf[1] != 'X')) {
+                                send_invalid_response();
+                            } else {
+                            	if (buf[1] == 'Z') {
+									set_current_run_mode(run_mode_jog_z);
+                            	} else {
+									set_current_run_mode(run_mode_jog_x);
+                            	}
+                            
+								int32_t step = 0;
+								int32_t accel = 0;
+								int32_t decel = 0;
+								int32_t speed = 0;
+
+                                sscanf(&buf[2],"%08x%08x%08x%08x",  
+                                	(unsigned int *)&step, 	
+									(unsigned int *)&accel, 
+									(unsigned int *)&decel, 
+									(unsigned int *)&speed);
+
+								uint32_t max_s_lim;
+								uint32_t accel_lim;
+
+								if(step < 0) {
+									jog_state.dir = -1;
+									step = -step;
+								}
+								else {
+									jog_state.dir = +1;
+								}
+
+								#define T1_FREQ 1382400
+								#define ALPHA (2*3.14159/3200)
+								#define A_T_x100 ((int32_t)(ALPHA*T1_FREQ*100)) 
+								#define T1_FREQ_148 ((int32_t)((T1_FREQ*0.676)/100))
+								#define A_SQ (int32_t)(ALPHA*2*10000000000)
+								#define A_x20000 (int32_t)(ALPHA*20000)
+
+								jog_state.min_delay = A_T_x100 / speed;
+								jog_state.step_delay = (T1_FREQ_148 * sqrt(A_SQ / accel))/100;
+								max_s_lim = (int32_t)speed*speed/(int32_t)(((int32_t)A_x20000*accel)/100);
+								if(max_s_lim == 0) {
+									max_s_lim = 1;
+								}
+								accel_lim = ((int32_t)step*decel) / (accel+decel);
+								if(accel_lim == 0) {
+									accel_lim = 1;
+								}
+								if(accel_lim <= max_s_lim) {
+									jog_state.decel_val = accel_lim - step;
+								}
+								else{
+									jog_state.decel_val = -((int32_t)max_s_lim*accel)/decel;
+								}
+								if(jog_state.decel_val == 0) {
+									jog_state.decel_val = -1;
+								}
+								jog_state.decel_start = step + jog_state.decel_val;
+								if(jog_state.step_delay <= jog_state.min_delay){
+									jog_state.step_delay = jog_state.min_delay;
+									jog_state.run_state = RUN;
+								}
+								else {
+									jog_state.run_state = ACCEL;
+								}
+								jog_state.accel_count = 0;
+
+								TIM4->ARR = jog_state.step_delay;
+								
+                                send_ok_response();
+							}
+                		} break;
                         
                 // Run cycle
                 case 'C': {

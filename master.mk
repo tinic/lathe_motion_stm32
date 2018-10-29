@@ -9,7 +9,7 @@
 #####				  st-flash, stm32flash, stm32loader, openocd, etc.
 #####
 
-BUILDTOOLPATH	= /usr/bin
+BUILDTOOLPATH	= /usr/local/bin
 FLASHTOOLPATH	= /usr/local/bin
 
 ################################################################################
@@ -63,7 +63,7 @@ INCLUDE += -I$(DEVICEINC)
 ##### compiler flags
 #####
 
-CFLAGS   = -Ofast
+CFLAGS   = -Os
 # https://bugs.launchpad.net/gcc-arm-embedded/+bug/1747966
 CFLAGS  += -flto -fno-function-sections -fno-data-sections
 CFLAGS	+= -Wall 
