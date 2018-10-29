@@ -600,13 +600,6 @@ void TIM3_IRQHandler(void)
     }
 }
 
-void TIM4_IRQHandler(void)
-{
-    if ((TIM4->SR & TIM_SR_UIF)) {
-        TIM4->SR &= ~(TIM_SR_UIF);
-    }
-}
-
 #ifdef __cplusplus
 } // extern "C" {
 #endif  // #ifdef __cplusplus
@@ -917,7 +910,7 @@ static void parse(void) {
 								}
 								jog_state.accel_count = 0;
 
-								TIM4->ARR = jog_state.step_delay;
+								TIM2->ARR = jog_state.step_delay;
 								
                                 send_ok_response();
 							}
@@ -1275,21 +1268,6 @@ static void init_stepper_sync_timer()
     NVIC_SetPriority(TIM2_IRQn, 1); // second highest priority in system
 }
 
-static void init_jog_timer()
-{
-    RCC->APB1ENR |= RCC_APB1ENR_TIM4EN;  // enable TIM3 clock
-
-    TIM4->CR1 |= TIM_CR1_ARPE | TIM_CR1_URS;
-    TIM4->PSC = 1;
-    TIM4->ARR = 32768;
-    TIM4->DIER |= TIM_DIER_UIE;
-    TIM4->EGR = TIM_EGR_UG; // Generate Update Event to copy ARR to its shadow
-    TIM4->CR1 |= TIM_CR1_CEN;
-
-    NVIC_EnableIRQ(TIM4_IRQn);
-    NVIC_SetPriority(TIM4_IRQn, 2); // third highest priority in system
-}
-
 void init_cycle_counter() {
     volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC;
     volatile uint32_t *DWT_LAR = (uint32_t *)0xE0001FB0;
@@ -1311,7 +1289,6 @@ static void init_hardware(void)
     init_qenc();
     init_stepper_pins();
     init_stepper_sync_timer();
-    init_jog_timer();
 }
 
 int main(void) 
