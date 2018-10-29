@@ -81,7 +81,8 @@ struct cycle_entry {
     int32_t wait_for_index_zero;
 };
 
-static cycle_entry current_cycle[64];
+static const size_t current_cycle_max = 128;
+static cycle_entry current_cycle[current_cycle_max];
 static size_t current_cycle_idx = 0;
 static size_t current_cycle_len = 0;
 
@@ -201,6 +202,8 @@ static uint8_t get_char(uint8_t *c)
     return 1;
 }
 
+volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
+
 static void parse(void);
 
 #ifdef __cplusplus
@@ -272,12 +275,6 @@ void EXTI1_IRQHandler(void)
     __enable_irq();
 }
 
-volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC;
-#define DEMCT_TRCENA 0x01000000
-volatile uint32_t *DWT_CONTROL = (uint32_t *)0xE0001000;
-volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
-#define CYCCNTENA (1<<0)
-
 void TIM2_IRQHandler(void)
 {
     static int32_t stepper_dir_x = 0; // direction is undefined by default
@@ -299,9 +296,7 @@ void TIM2_IRQHandler(void)
 
         absolute_actual_pos += cnt - absolute_pos_start_offset;
 
-        *DEMCR |= DEMCT_TRCENA;
         *DWT_CYCCNT = 0;
-        *DWT_CONTROL |= CYCCNTENA;
 
         if (wait_for_index_zero) {
             if (index_zero_occured && current_run_mode != run_mode_cycle_pause) {
@@ -825,6 +820,10 @@ static void parse(void) {
                                 prev_target_pos = entry.target_pos;
                                 
                                 current_cycle[current_cycle_idx++]= entry;
+
+                                if (current_cycle_idx >= current_cycle_max) {
+                                    break;
+                                }
                             }
 							
                             if (ok_to_run && current_cycle_idx > 0) {
@@ -1119,10 +1118,21 @@ static void init_jog_timer()
     NVIC_SetPriority(TIM4_IRQn, 2); // third highest priority in system
 }
 
+void init_cycle_counter() {
+    volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC;
+    volatile uint32_t *DWT_LAR = (uint32_t *)0xE0001FB0;
+    volatile uint32_t *DWT_CONTROL = (uint32_t *)0xE0001000;
+
+    *DEMCR |= 0x01000000;
+    *DWT_LAR = 0xC5ACCE55; 
+    *DWT_CONTROL |= 1;
+}
+
 static void init_hardware(void)
 { 
     init_constants();
     init_clock();
+    init_cycle_counter();
     init_led();
     init_usart(USART_BAUD);
     init_systick();

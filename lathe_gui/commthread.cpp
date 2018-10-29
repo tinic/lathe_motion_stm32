@@ -126,9 +126,9 @@ void CommThread::run() {
 
     cfmakeraw(&tty);
 
-    tty.c_cflag &= ~PARENB;
-    tty.c_cflag &= ~CSTOPB;
-    tty.c_cflag &= ~CSIZE;
+    tty.c_cflag &= uint32_t(~PARENB);
+    tty.c_cflag &= uint32_t(~CSTOPB);
+    tty.c_cflag &= uint32_t(~CSIZE);
     tty.c_cflag |= CS8;
 
     tty.c_cflag &= ~CRTSCTS;
@@ -139,8 +139,7 @@ void CommThread::run() {
 
     tcflush(fd, TCIFLUSH);
 
-    if (tcsetattr (fd, TCSANOW, &tty) != 0)
-    {
+    if (tcsetattr (fd, TCSANOW, &tty) != 0) {
         return;
     }
 
