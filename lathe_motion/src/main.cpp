@@ -332,6 +332,8 @@ void SysTick_Handler(void)
         led_state       = led_state_next;
         led_state_next  = led_idle;
     }
+    
+    IWDG->KR  = 0xAAAA;
 }
 
 void USART1_IRQHandler(void)
@@ -1278,6 +1280,17 @@ void init_cycle_counter() {
     *DWT_CONTROL |= 1;
 }
 
+static void init_watchdog(void)
+{
+    // enable watchdog
+    IWDG->KR  = 0xCCCC;
+    IWDG->KR  = 0x5555;
+
+    // 1s watchdog
+    IWDG->PR  = 1; // 32kHz / 8
+    IWDG->RLR = 0xFFF; // *4095 = 1.02375s
+}
+
 static void init_hardware(void)
 { 
     init_constants();
@@ -1289,6 +1302,7 @@ static void init_hardware(void)
     init_qenc();
     init_stepper_pins();
     init_stepper_sync_timer();
+    init_watchdog();
 }
 
 int main(void) 
