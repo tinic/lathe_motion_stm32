@@ -62,9 +62,10 @@ void MainWindow::update()
 
    QLabel *rawStatusLabel = findChild<QLabel *>("rawStatusLabel");
 
-   sprintf(str,"A:%c%012llx "
-               "Z:%c%012llx "
-               "X:%c%012llx "
+   sprintf(str,"A:%c%010llx "
+               "Z:%c%010llx "
+               "X:%c%010llx "
+               "D:%c%010llx "
                "R:%c%04lx "
                "I:%c%04lx "
                "D:%c%04lx "
@@ -73,6 +74,8 @@ void MainWindow::update()
                "ZD:%c%06lx "
                "XM:%c%06lx "
                "XD:%c%06lx "
+               "DM:%c%06lx "
+               "DD:%c%06lx "
                "ES:%c%04lx "
                "EO:%c%04lx "
                "T:%c%08lx ",
@@ -82,6 +85,8 @@ void MainWindow::update()
            llabs(local_packet.stepper_actual_pos_z),
            local_packet.stepper_actual_pos_x >=0 ? '+' : '-',
            llabs(local_packet.stepper_actual_pos_x),
+           local_packet.stepper_actual_pos_d >=0 ? '+' : '-',
+           llabs(local_packet.stepper_actual_pos_d),
            local_packet.absolute_cnt >=0 ? '+' : '-',
            labs(local_packet.absolute_cnt),
            local_packet.absolute_idx >=0 ? '+' : '-',
@@ -98,6 +103,10 @@ void MainWindow::update()
            labs(local_packet.stepper_follow_mul_x),
            local_packet.stepper_follow_div_x >=0 ? '+' : '-',
            labs(local_packet.stepper_follow_div_x),
+           local_packet.stepper_follow_mul_d >=0 ? '+' : '-',
+           labs(local_packet.stepper_follow_mul_d),
+           local_packet.stepper_follow_div_d >=0 ? '+' : '-',
+           labs(local_packet.stepper_follow_div_d),
            local_packet.error_state_out_of_sync >=0 ? '+' : '-',
            labs(local_packet.error_state_out_of_sync),
            local_packet.error_index_offset >=0 ? '+' : '-',

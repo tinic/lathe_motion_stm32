@@ -235,20 +235,23 @@ void CommThread::run() {
 
         size_t pos = 0;
         statusMutex.lock();
-        status_packet.absolute_pos = int64_t(std::stoull(response.substr(pos,16), nullptr, 16)); pos += 16; // 1
-        status_packet.stepper_actual_pos_z = int64_t(std::stoull(response.substr(pos,16), nullptr, 16)); pos += 16; // 2
-        status_packet.stepper_actual_pos_x = int64_t(std::stoull(response.substr(pos,16), nullptr, 16)); pos += 16; // 3
-        status_packet.absolute_cnt = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 4
-        status_packet.absolute_idx = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 5
-        status_packet.current_index_delta = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 6
-        status_packet.absolute_pos_start_offset = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 7
-        status_packet.stepper_follow_mul_z = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 8
-        status_packet.stepper_follow_div_z = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 9
-        status_packet.stepper_follow_mul_x = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 10
-        status_packet.stepper_follow_div_x = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 11
-        status_packet.error_state_out_of_sync = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 12
-        status_packet.error_index_offset = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 13
-        status_packet.absolute_tick = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8; // 14
+        status_packet.absolute_pos = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_actual_pos_z = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_actual_pos_x = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_actual_pos_d = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.absolute_cnt = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.absolute_idx = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.current_index_delta = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.absolute_pos_start_offset = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_follow_mul_z = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_follow_div_z = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_follow_mul_x = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_follow_div_x = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_follow_mul_d = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.stepper_follow_div_d = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.error_state_out_of_sync = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.error_index_offset = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.absolute_tick = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
         statusMutex.unlock();
 
         emit update();
