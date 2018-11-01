@@ -63,7 +63,7 @@ INCLUDE += -I$(DEVICEINC)
 ##### compiler flags
 #####
 
-CFLAGS   = -Os
+CFLAGS   = -Ofast
 # https://bugs.launchpad.net/gcc-arm-embedded/+bug/1747966
 CFLAGS  += -flto -fno-function-sections -fno-data-sections
 CFLAGS	+= -Wall 

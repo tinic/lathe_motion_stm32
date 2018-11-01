@@ -42,6 +42,8 @@ public:
     bool idle;
     bool stop;
 
+    std::string cprog;
+
 signals:
     void update();
 

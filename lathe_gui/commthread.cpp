@@ -224,6 +224,26 @@ void CommThread::run() {
 
         }
 
+        if (cprog.size()>0) {
+            std::stringstream ss(cprog);
+            while (!ss.eof()) {
+                char cmd[128] = {0};
+                ss.getline(cmd, 128);
+                size_t len = strlen(cmd);
+                uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(cmd), len);
+                cmd[len+0] = char(int2hex[((crc>>12)&0xF)]);
+                cmd[len+1] = char(int2hex[((crc>> 8)&0xF)]);
+                cmd[len+2] = char(int2hex[((crc>> 4)&0xF)]);
+                cmd[len+3] = char(int2hex[((crc>> 0)&0xF)]);
+                cmd[len+4] = '\n';
+                cmd[len+5] = 0;
+                std::string cmds((const char *)cmd);
+                send_command(fd, cmds);
+                read_response(fd, bad_crc);
+            }
+            cprog = "";
+        }
+
         std::string cmd("S");
         send_command(fd, cmd);
 

@@ -33,6 +33,11 @@ private slots:
 
    void zeroButtonClicked();
 
+   void progLoadClicked();
+   void progRunClicked();
+   void progPauseClicked();
+   void progClearClicked();
+
    void stopButtonToggled(bool);
    void idleButtonToggled(bool);
 

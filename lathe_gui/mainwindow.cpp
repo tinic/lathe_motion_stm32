@@ -3,6 +3,11 @@
 
 #include <math.h>
 #include <QLabel>
+#include <QFileDialog>
+#include <QFile>
+#include <QMessageBox>
+#include <QTextStream>
+#include <QPlainTextEdit>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -179,6 +184,46 @@ void MainWindow::passToCommThread()
         commThread.newxfeed = currentStepValue * currentDirectionValue * t;
         commThread.setfollow = true;
     }
+}
+
+void MainWindow::progLoadClicked()
+{
+    QPlainTextEdit *progText = findChild<QPlainTextEdit *>("progText");
+
+    QString fileName = QFileDialog::getOpenFileName(nullptr,
+        tr("Open Command File"), "",
+        tr("Text File (*.txt);;All Files (*)"));
+    if (fileName.length()>0) {
+        QFile file(fileName);
+
+        if (!file.open(QIODevice::ReadOnly)) {
+            QMessageBox::information(this, tr("Unable to open file"),
+                file.errorString());
+            return;
+        }
+
+        progText->clear();
+
+        QTextStream in(&file);
+        QString line;
+        while (in.readLineInto(&line)) {
+            progText->appendPlainText(line);
+        }
+    }
+}
+
+void MainWindow::progRunClicked()
+{
+    QPlainTextEdit *progText = findChild<QPlainTextEdit *>("progText");
+    commThread.cprog = progText->toPlainText().toStdString();
+}
+
+void MainWindow::progPauseClicked()
+{
+}
+
+void MainWindow::progClearClicked()
+{
 }
 
 void MainWindow::zeroButtonClicked()

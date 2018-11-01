@@ -286,19 +286,12 @@ LIBDIVIDE_API __m128i libdivide_s64_branchfree_do_vector(__m128i numers, const s
 //////// Internal Utility Functions
 
 static inline uint32_t libdivide__mullhi_u32(uint32_t x, uint32_t y) {
-#if defined(__ARM_ARCH_7M__) || defined(__ARM_ARCH_7EM__) || defined(__ARM_ARCH_8A__)
-	int32_t lo;
-	int32_t hi;
-	__asm__ ("umull %0, %1, %2, %3" : "=&r"(lo), "=&r"(hi) : "r"(x), "r"(y));
-	return hi;
-#else  // #ifdef __arm__
     uint64_t xl = x, yl = y;
     uint64_t rl = xl * yl;
     return (uint32_t)(rl >> 32);
-#endif  // #ifdef __arm__
 }
 
-static uint64_t libdivide__mullhi_u64(uint64_t x, uint64_t y) {
+static inline uint64_t libdivide__mullhi_u64(uint64_t x, uint64_t y) {
 #if defined(LIBDIVIDE_VC) && defined(LIBDIVIDE_IS_X86_64)
     return __umulh(x, y);
 #elif defined(HAS_INT128_T)
@@ -1569,7 +1562,7 @@ struct libdivide_s64_branchfree_t libdivide_s64_branchfree_gen(int64_t d) {
     return ret;
 }
 
-int64_t libdivide_s64_do(int64_t numer, const struct libdivide_s64_t *denom) {
+inline int64_t libdivide_s64_do(int64_t numer, const struct libdivide_s64_t *denom) {
     uint8_t more = denom->more;
     int64_t magic = denom->magic;
     if (magic == 0) { //shift path

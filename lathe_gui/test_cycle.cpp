@@ -93,9 +93,11 @@ void convert_and_print() {
 	ss << std::uppercase;
 	ss << std::setfill('0');
 
-	ss << 'C';
-
+	ss << "CR\n";
+	
 	for (int32_t c = 0; c < entries.size(); c++) {
+
+		ss << 'C';
 
 		switch(entries[c].target_axs) {
 			case 0: {
@@ -130,9 +132,10 @@ void convert_and_print() {
 		ss << std::setw(8);
 		ss << entries[c].wait_for_index_zero;
 
+		ss << "\n";
 	}
 
-	std::cout << ss.str() << '\n';
+	std::cout << ss.str();
 }
 
 int main() {
