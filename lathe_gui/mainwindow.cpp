@@ -39,9 +39,9 @@ MainWindow::~MainWindow()
 void MainWindow::update()
 {
     lathe_status_packet local_packet;
-    commThread.statusMutex.lock();
+    commThread.mutex.lock();
     memcpy(&local_packet, &commThread.status_packet, sizeof(lathe_status_packet));
-    commThread.statusMutex.unlock();
+    commThread.mutex.unlock();
 
     double rpm = local_packet.current_index_delta ? (60000.0 / double(local_packet.current_index_delta)) : 0.0;
     if (rpm < 60) rpm = 0;
@@ -49,6 +49,7 @@ void MainWindow::update()
     char str[256] = {0};
     sprintf(str, "POSZ: %c%07.02f%s\n"
                  "POSX: %c%07.02f%s\n"
+                 "POSD: %c%07.02f%s\n"
                  "POSA: %c %06.02f%s\n"
                  "RPM :  %07.02f\n",
             local_packet.stepper_actual_pos_z < 0 ? '-' : '+',
@@ -56,6 +57,9 @@ void MainWindow::update()
             "mm",
             local_packet.stepper_actual_pos_x < 0 ? '-' : '+',
             ((fabs(double(local_packet.stepper_actual_pos_x)) / 3200.0) / 10.0) * 25.4,
+            "mm",
+            local_packet.stepper_actual_pos_d < 0 ? '-' : '+',
+            ((fabs(double(local_packet.stepper_actual_pos_d)) / 3200.0) / 12.0) * 25.4,
             "mm",
             local_packet.absolute_cnt < 0 ? '-' : '+',
             ( fabs(double(local_packet.absolute_cnt)) / 2880.0) * 360,
@@ -74,7 +78,7 @@ void MainWindow::update()
                "R:%c%04lx "
                "I:%c%04lx "
                "D:%c%04lx "
-               "O:%c%04lx "
+               "AO:%c%06lx "
                "ZM:%c%06lx "
                "ZD:%c%06lx "
                "XM:%c%06lx "
@@ -82,7 +86,7 @@ void MainWindow::update()
                "DM:%c%06lx "
                "DD:%c%06lx "
                "ES:%c%04lx "
-               "EO:%c%04lx "
+               "EO:%c%06lx "
                "T:%c%08lx ",
            local_packet.absolute_pos >=0 ? '+' : '-',
            llabs(local_packet.absolute_pos),
@@ -114,8 +118,8 @@ void MainWindow::update()
            labs(local_packet.stepper_follow_div_d),
            local_packet.error_state_out_of_sync >=0 ? '+' : '-',
            labs(local_packet.error_state_out_of_sync),
-           local_packet.error_index_offset >=0 ? '+' : '-',
-           labs(local_packet.error_index_offset),
+           local_packet.current_mode >=0 ? '+' : '-',
+           labs(local_packet.current_mode),
            local_packet.absolute_tick >=0 ? '+' : '-',
            labs(local_packet.absolute_tick));
    rawStatusLabel->setText(str);
@@ -170,6 +174,7 @@ void MainWindow::passToCommThread()
     QPushButton *button0 = findChild<QPushButton *>("aButton");
     QPushButton *button1 = findChild<QPushButton *>("xButton");
     QPushButton *button2 = findChild<QPushButton *>("zButton");
+    commThread.mutex.lock();
     if (button2->isChecked()) {
         commThread.newzfeed = currentStepValue * currentDirectionValue;
         commThread.newxfeed = 0.0;
@@ -184,6 +189,7 @@ void MainWindow::passToCommThread()
         commThread.newxfeed = currentStepValue * currentDirectionValue * t;
         commThread.setfollow = true;
     }
+    commThread.mutex.unlock();
 }
 
 void MainWindow::progLoadClicked()
@@ -214,8 +220,10 @@ void MainWindow::progLoadClicked()
 
 void MainWindow::progRunClicked()
 {
+    commThread.mutex.lock();
     QPlainTextEdit *progText = findChild<QPlainTextEdit *>("progText");
     commThread.cprog = progText->toPlainText().toStdString();
+    commThread.mutex.unlock();
 }
 
 void MainWindow::progPauseClicked()
@@ -228,7 +236,9 @@ void MainWindow::progClearClicked()
 
 void MainWindow::zeroButtonClicked()
 {
+    commThread.mutex.lock();
     commThread.setzero = true;
+    commThread.mutex.unlock();
 }
 
 void MainWindow::stopButtonToggled(bool)
@@ -236,9 +246,11 @@ void MainWindow::stopButtonToggled(bool)
     QPushButton *button0 = findChild<QPushButton *>("idleButton");
     QPushButton *button1 = findChild<QPushButton *>("stopButton");
     if (!button1->isChecked()) button0->setChecked(false);
+    commThread.mutex.lock();
     commThread.idle = button0->isChecked();
     commThread.stop = button1->isChecked();
     commThread.setfollow = true;
+    commThread.mutex.unlock();
 }
 
 void MainWindow::idleButtonToggled(bool)
@@ -246,9 +258,11 @@ void MainWindow::idleButtonToggled(bool)
     QPushButton *button0 = findChild<QPushButton *>("idleButton");
     QPushButton *button1 = findChild<QPushButton *>("stopButton");
     if (button0->isChecked()) button1->setChecked(true);
+    commThread.mutex.lock();
     commThread.idle = button0->isChecked();
     commThread.stop = button1->isChecked();
     commThread.setfollow = true;
+    commThread.mutex.unlock();
 }
 
 void MainWindow::aButtonToggled(bool) {

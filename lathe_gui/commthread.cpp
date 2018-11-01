@@ -57,7 +57,7 @@ static uint16_t CRC16(const uint8_t *data, size_t len)
     return crcWord;
 }
 
-CommThread::CommThread(QObject *parent) : QObject(parent), keepRunning(true), statusMutex(QMutex::Recursive)
+CommThread::CommThread(QObject *parent) : QObject(parent), keepRunning(true), mutex(QMutex::Recursive)
 {
 }
 
@@ -153,6 +153,7 @@ void CommThread::run() {
     bool bad_crc = false;
 
     while (keepRunning) {
+        mutex.lock();
         if (idle) {
             std::string cmd("H1");
             send_command(fd, cmd);
@@ -162,18 +163,21 @@ void CommThread::run() {
             send_command(fd, cmd);
             read_response(fd, bad_crc);
         } else {
-            if (newzfeed != 0.0 && newxfeed != 0.0) {
-                std::string cmd("FB");
-                send_command(fd, cmd);
-                read_response(fd, bad_crc);
-            } else if (newzfeed != 0.0) {
-                std::string cmd("FZ");
-                send_command(fd, cmd);
-                read_response(fd, bad_crc);
-            } else {
-                std::string cmd("FX");
-                send_command(fd, cmd);
-                read_response(fd, bad_crc);
+            if ((status_packet.current_mode>>16) != 9 &&
+                (status_packet.current_mode>>16) != 10) {
+                if (newzfeed != 0.0 && newxfeed != 0.0) {
+                    std::string cmd("FB");
+                    send_command(fd, cmd);
+                    read_response(fd, bad_crc);
+                } else if (newzfeed != 0.0) {
+                    std::string cmd("FZ");
+                    send_command(fd, cmd);
+                    read_response(fd, bad_crc);
+                } else {
+                    std::string cmd("FX");
+                    send_command(fd, cmd);
+                    read_response(fd, bad_crc);
+                }
             }
         }
 
@@ -230,16 +234,14 @@ void CommThread::run() {
                 char cmd[128] = {0};
                 ss.getline(cmd, 128);
                 size_t len = strlen(cmd);
-                uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(cmd), len);
-                cmd[len+0] = char(int2hex[((crc>>12)&0xF)]);
-                cmd[len+1] = char(int2hex[((crc>> 8)&0xF)]);
-                cmd[len+2] = char(int2hex[((crc>> 4)&0xF)]);
-                cmd[len+3] = char(int2hex[((crc>> 0)&0xF)]);
-                cmd[len+4] = '\n';
-                cmd[len+5] = 0;
-                std::string cmds((const char *)cmd);
+                if (len == 0) {
+                    break;
+                }
+                qDebug("'%s' %d", cmd, strlen(cmd));
+                std::string cmds(cmd);
                 send_command(fd, cmds);
-                read_response(fd, bad_crc);
+                std::string response = read_response(fd, bad_crc);
+                qDebug("%s", response.c_str());
             }
             cprog = "";
         }
@@ -250,11 +252,11 @@ void CommThread::run() {
         std::string response = read_response(fd, bad_crc);
 
         if ( bad_crc ) {
+            mutex.unlock();
             continue;
         }
 
         size_t pos = 0;
-        statusMutex.lock();
         status_packet.absolute_pos = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
         status_packet.stepper_actual_pos_z = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
         status_packet.stepper_actual_pos_x = int32_t(std::stoull(response.substr(pos,8), nullptr, 16)); pos += 8;
@@ -270,9 +272,9 @@ void CommThread::run() {
         status_packet.stepper_follow_mul_d = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
         status_packet.stepper_follow_div_d = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
         status_packet.error_state_out_of_sync = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
-        status_packet.error_index_offset = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
+        status_packet.current_mode = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
         status_packet.absolute_tick = int32_t(std::stoul(response.substr(pos,8), nullptr, 16)); pos += 8;
-        statusMutex.unlock();
+        mutex.unlock();
 
         emit update();
 

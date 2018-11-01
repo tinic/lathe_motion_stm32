@@ -21,7 +21,7 @@ struct lathe_status_packet {
         int32_t stepper_follow_mul_d;
         int32_t stepper_follow_div_d;
         int32_t error_state_out_of_sync;
-        int32_t error_index_offset;
+        int32_t current_mode;
         int32_t absolute_tick;
 };
 
@@ -32,7 +32,7 @@ public:
     explicit CommThread(QObject *parent = nullptr);
     bool keepRunning;
 
-    QMutex statusMutex;
+    QMutex mutex;
     lathe_status_packet status_packet;
 
     double newzfeed;

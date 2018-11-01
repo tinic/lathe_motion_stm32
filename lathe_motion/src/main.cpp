@@ -189,7 +189,8 @@ static int32_t stepper_jog_tim_d = 0;
 static int32_t cycle_counter = 0;
 
 struct cycle_entry {
-    int32_t target_axs;
+    uint8_t target_axs;
+    uint8_t wait_for_index_zero;
     int32_t target_pos;
     int32_t stepper_mul_z;
     int32_t stepper_div_z;
@@ -206,10 +207,9 @@ struct cycle_entry {
 #ifdef LIB_DIVIDE
     libdivide::libdivide_s64_t stepper_div_d_opt;
 #endif  // #ifdef LIB_DIVIDE
-    int32_t wait_for_index_zero;
 };
 
-static const size_t current_cycle_max = 128;
+static const size_t current_cycle_max = 400;
 static cycle_entry current_cycle[current_cycle_max];
 static size_t current_cycle_idx = 0;
 static size_t current_cycle_len = 0;
@@ -285,7 +285,7 @@ static uint16_t CRC16(const uint8_t *data, size_t len)
 }
 
 #define USART_BAUD 115200
-#define USART_BUFFER_SIZE   256
+#define USART_BUFFER_SIZE 128
 
 static void put_char(uint8_t byte)
 {
@@ -529,18 +529,15 @@ void TIM2_IRQHandler(void)
         absolute_actual_pos += cnt - absolute_pos_start_offset;
 
         if (wait_for_index_zero) {
-            if (index_zero_occured && current_run_mode != run_mode_cycle_pause) {
-                wait_for_index_zero = 0;
+            if (index_zero_occured) {
                 index_zero_occured = 0;
+                wait_for_index_zero = 0;
                 absolute_pos_start_offset = cnt;
                 absolute_pos = 0;
                 absolute_actual_pos = 0;
-                stepper_actual_pos_z = 0;
-                stepper_actual_pos_x = 0;
-                stepper_actual_pos_d = 0;
-                stepper_off_z = 0;
-                stepper_off_x = 0;
-                stepper_off_d = 0;
+                stepper_off_z = stepper_actual_pos_z;
+                stepper_off_x = stepper_actual_pos_x;
+                stepper_off_d = stepper_actual_pos_d;
             } else {
                 // Do nothing until we hit index zero
                 __enable_irq();
@@ -793,27 +790,48 @@ void TIM2_IRQHandler(void)
 
         if (current_run_mode == run_mode_cycle ||
             current_run_mode == run_mode_cycle_pause) {
+            __disable_irq();
             bool do_next_cycle_step = false;
             if (current_cycle[current_cycle_idx].target_axs == 0) {
-                if (stepper_actual_pos_z == (current_cycle[current_cycle_idx].target_pos + stepper_off_z)) {
-                    stepper_off_z = stepper_actual_pos_z;
-                    do_next_cycle_step = true;
+                if (current_cycle[current_cycle_idx].stepper_mul_z <= 0) {
+                    if (stepper_actual_pos_z >= current_cycle[current_cycle_idx].target_pos) {
+                        stepper_off_z = stepper_actual_pos_z;
+                        do_next_cycle_step = true;
+                    }   
+                } else {
+                    if (stepper_actual_pos_z <= current_cycle[current_cycle_idx].target_pos) {
+                        stepper_off_z = stepper_actual_pos_z;
+                        do_next_cycle_step = true;
+                    }   
                 }
             }
             if (current_cycle[current_cycle_idx].target_axs == 1) {
-                if (stepper_actual_pos_x == (current_cycle[current_cycle_idx].target_pos + stepper_off_x)) {
-                    stepper_off_x = stepper_actual_pos_x;
-                    do_next_cycle_step = true;
+                if (current_cycle[current_cycle_idx].stepper_mul_x <= 0) {
+                    if (stepper_actual_pos_x >= current_cycle[current_cycle_idx].target_pos) {
+                        stepper_off_x = stepper_actual_pos_x;
+                        do_next_cycle_step = true;
+                    }
+                } else {
+                    if (stepper_actual_pos_x <= current_cycle[current_cycle_idx].target_pos) {
+                        stepper_off_x = stepper_actual_pos_x;
+                        do_next_cycle_step = true;
+                    }
                 }
             }
             if (current_cycle[current_cycle_idx].target_axs == 2) {
-                if (stepper_actual_pos_d == (current_cycle[current_cycle_idx].target_pos + stepper_off_d)) {
-                    stepper_off_d = stepper_actual_pos_d;
-                    do_next_cycle_step = true;
+                if (current_cycle[current_cycle_idx].stepper_mul_d <= 0) {
+                    if (stepper_actual_pos_d >= current_cycle[current_cycle_idx].target_pos) {
+                        stepper_off_d = stepper_actual_pos_d;
+                        do_next_cycle_step = true;
+                    }
+                } else {
+                    if (stepper_actual_pos_d <= current_cycle[current_cycle_idx].target_pos) {
+                        stepper_off_d = stepper_actual_pos_d;
+                        do_next_cycle_step = true;
+                    }
                 }
             }
             if (do_next_cycle_step) {
-                __disable_irq();
                 absolute_pos = 0;
                 absolute_pos_start_offset = cnt;
                 current_cycle_idx++;
@@ -824,8 +842,8 @@ void TIM2_IRQHandler(void)
                     wait_for_index_zero = 1;
                     index_zero_occured = 0;
                 }
-                __enable_irq();
             }
+            __enable_irq();
         }
 
         cycle_counter = *DWT_CYCCNT;
@@ -1011,7 +1029,7 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
 static void send_bad_crc_response()
 {
     const char *response = "BADCRC83AA\n";
-    for (size_t c=0; c<7; c++) {
+    for (size_t c=0; c<11; c++) {
         put_char(response[c]);
     }
 }
@@ -1019,7 +1037,7 @@ static void send_bad_crc_response()
 static void send_invalid_response()
 {
     const char *response = "INVALID6E66\n";
-    for (size_t c=0; c<7; c++) {
+    for (size_t c=0; c<1; c++) {
         put_char(response[c]);
     }
 }
@@ -1039,15 +1057,15 @@ static void parse(void) {
     while(get_char(&in_char)) {
         if(in_char != '\n') {
             buf[buf_pos++] = in_char;
-            if (buf_pos > 32) {
+            if (buf_pos > 127) {
                 buf_pos = 0;
                 break;
             }
         } else {
             if (buf_pos<4) {
-                send_bad_crc_response();
+                send_invalid_response();
                 buf_pos = 0;
-                break;
+                break; 
             }
 
             const size_t size_of_crc = 4;
@@ -1210,16 +1228,25 @@ static void parse(void) {
                                 buf[pos] != 'R' && 
                                 buf[pos] != 'P') {
                                 ok_to_run = false;
+                                send_invalid_response();
                                 break;
                             }
 
                             if (buf[pos] == 'S') {
+                                if (current_cycle_len <= 0 ||
+                                    current_cycle_idx >= current_cycle_len) {
+                                    send_invalid_response();
+                                    break;
+                                }
+                                set_zero_pos();
                                 set_current_run_mode(run_mode_cycle);
+                                send_ok_response();
                                 break;
                             }
 
                             if (buf[pos] == 'P') {
                                 set_current_run_mode(run_mode_cycle_pause);
+                                send_ok_response();
                                 break;
                             }
 
@@ -1228,6 +1255,7 @@ static void parse(void) {
                             if (buf[pos] == 'R') {
                                 current_cycle_len = 0;
                                 current_cycle_idx = 0;
+                                send_ok_response();
                                 break;
                             }
 
@@ -1240,14 +1268,19 @@ static void parse(void) {
                             cycle_entry entry;
                             entry.target_axs = (buf[pos] == 'X') ? 1 : ( (buf[pos] == 'D') ? 2 : 0); pos++;
 							
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.target_pos); pos += 8;
+                            uint32_t val = 0;
+							sscanf(&buf[pos],"%08x",(unsigned int *)&val); entry.target_pos = val; pos += 8;
 							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_z); pos += 8;
 							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_z); pos += 8;
 							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_x); pos += 8;
 							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_x); pos += 8;
 							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_d); pos += 8;
 							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_d); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.wait_for_index_zero); pos += 8;
+							sscanf(&buf[pos],"%08x",(unsigned int *)&val); entry.wait_for_index_zero = val; pos += 8;
+
+                            entry.stepper_mul_z = -entry.stepper_mul_z;
+                            entry.stepper_mul_x = -entry.stepper_mul_x;
+                            entry.stepper_mul_d = -entry.stepper_mul_d;
 
                             if (entry.stepper_div_z <= 0 ||
                                 entry.stepper_div_x <= 0 ||
@@ -1257,7 +1290,7 @@ static void parse(void) {
 
                             int32_t gcd_z = gcd(entry.stepper_mul_z, entry.stepper_div_z); entry.stepper_mul_z /= gcd_z; entry.stepper_div_z /= gcd_z;
                             int32_t gcd_x = gcd(entry.stepper_mul_x, entry.stepper_div_x); entry.stepper_mul_x /= gcd_x; entry.stepper_div_x /= gcd_x;
-                            int32_t gcd_d = gcd(entry.stepper_mul_d, entry.stepper_div_d); entry.stepper_mul_d /= gcd_d; entry.stepper_div_z /= gcd_d;
+                            int32_t gcd_d = gcd(entry.stepper_mul_d, entry.stepper_div_d); entry.stepper_mul_d /= gcd_d; entry.stepper_div_d /= gcd_d;
 
 #ifdef LIB_DIVIDE
                             entry.stepper_div_z_opt = libdivide::libdivide_s64_gen(entry.stepper_div_z);
@@ -1293,21 +1326,31 @@ static void parse(void) {
                             char sts[256];
                             size_t pos = 0;
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos + cnt)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_z + stepper_off_z)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_x + stepper_off_x)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_d + stepper_off_d)); pos += 8; 
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_z)); pos += 8; 
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_x)); pos += 8; 
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_d)); pos += 8; 
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(cnt)); pos += 8; 
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_idx)); pos += 8; 
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(current_index_delta)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos_start_offset)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_z)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_z)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_x)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_x)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_d)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_d)); pos += 8; 
+                            if (current_run_mode == run_mode_cycle) {
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].target_pos)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_mul_z)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_div_z)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_mul_x)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_div_x)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_mul_d)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_div_d)); pos += 8; 
+                            } else {
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos_start_offset)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_z)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_z)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_x)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_x)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_d)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_d)); pos += 8; 
+                            }
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_counter)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(error_index_offset)); pos += 8; 
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t((current_run_mode<<16) | (current_cycle_len<<8) | (current_cycle_idx) )); pos += 8; 
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_tick)); pos += 8; 
 
                             uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(sts), pos);

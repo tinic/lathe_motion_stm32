@@ -23,32 +23,32 @@ struct cycle_entry {
 static std::vector<cycle_entry> entries;
 
 inline double mm_to_step_z(double mm) {
-	mm /= 25.4 * 12.0; mm *= 3200; return mm;
+	mm *= 3200 / (25.4 / 12.0); return mm;
 }
 
 inline double mm_to_step_x(double mm) {
-	mm /= 25.4 * 10.0; mm *= 3200; return mm;
+	mm *= 3200 / (25.4 / 10.0); return mm;
 }
 
 inline double mm_to_step_d(double mm) {
-	mm /= 25.4 *  8.0; mm *= 3200; return mm;
+	mm *= 3200 / (25.4 / 12.0); return mm;
 }
 
-void add_move(int32_t axis, double distance, double speed, bool wait) {
+void add_move(int32_t axis, double pos, double speed, bool wait) {
 
 	const double motor_steps_per_rev = 3200.0;
 	const double encoder_steps_per_rev = 2880.0;
 	
 	const double lead_screw_tpi_z = 12.0;
 	const double lead_screw_tpi_x = 10.0;
-	const double lead_screw_tpi_d =  8.0;
+	const double lead_screw_tpi_d = 12.0;
 
 	switch (axis) {
 		case 0: {
 		entries.push_back({
 			int32_t(0),
-			int32_t(mm_to_step_z(distance)),
-			int32_t(0.5 * lead_screw_tpi_z * motor_steps_per_rev * 10.0), 
+			int32_t(mm_to_step_z(pos)),
+			int32_t(speed * lead_screw_tpi_z * motor_steps_per_rev * 10.0), 
 			int32_t(25.4 * encoder_steps_per_rev * 10.0), 
 			int32_t(0), 
 			int32_t(1), 
@@ -59,10 +59,10 @@ void add_move(int32_t axis, double distance, double speed, bool wait) {
 		case 1: {
 		entries.push_back({
 			int32_t(1),
-			int32_t(mm_to_step_x(distance)),
+			int32_t(mm_to_step_x(pos)),
 			int32_t(0), 
 			int32_t(1), 
-			int32_t(0.5 * lead_screw_tpi_x * motor_steps_per_rev * 10.0), 
+			int32_t(speed * lead_screw_tpi_x * motor_steps_per_rev * 10.0), 
 			int32_t(25.4 * encoder_steps_per_rev * 10.0), 
 			int32_t(0), 
 			int32_t(1), 
@@ -71,12 +71,12 @@ void add_move(int32_t axis, double distance, double speed, bool wait) {
 		case 2: {
 		entries.push_back({
 			int32_t(2),
-			int32_t(mm_to_step_d(distance)),
+			int32_t(mm_to_step_d(pos)),
 			int32_t(0), 
 			int32_t(1), 
 			int32_t(0), 
 			int32_t(1), 
-			int32_t(0.5 * lead_screw_tpi_d * motor_steps_per_rev * 10.0), 
+			int32_t(speed * lead_screw_tpi_d * motor_steps_per_rev * 10.0), 
 			int32_t(25.4 * encoder_steps_per_rev * 10.0), 
 			int32_t(wait ? 1 : 0)});
 		} break;
@@ -135,28 +135,48 @@ void convert_and_print() {
 		ss << "\n";
 	}
 
+    ss << "CS\n";
+
 	std::cout << ss.str();
 }
 
+const double cut_speed = 25.4 / 18.0;
+
 int main() {
 	// move to start
-	add_move(1, - 7.9375, 0.500, false);
+	add_move(1, 10.0000, +cut_speed, false);
 
-	for (int32_t c=0; c<10; c++) {
+	for (int32_t c=0; c<6; c++) {
+    	add_move(1, std::max(7.50000,7.9375 - double(c) * 0.1), -cut_speed, false);
+		add_move(0, +15.0000, +0.100, false);
+    	add_move(1,  10.0000, +cut_speed, false);
+		add_move(0,   0.0000, -cut_speed, false);
+    }
+
+	add_move(1,  7.5000, -cut_speed, false);
+
+	for (int32_t c=0; c<12; c++) {
 		// cut thread
-		add_move(0, +40.0000, 5.625, true );
+		add_move(0, +40.0000, cut_speed, true );
 	
 		// dwell
-		add_move(2, +10.0000, 0.500, false);
-		add_move(2, -10.0000, 0.500, false);
+		add_move(2, + 2.0000, +cut_speed, false);
+		add_move(2,   0.0000, -cut_speed, false);
 
 		// pull back
-		add_move(1, -12.9375, 0.500, false);
+		add_move(1,  12.9375, +cut_speed, false);
 		// move to start
-		add_move(0,   0.0000, 0.500, false);
+		add_move(0,   0.0000, -cut_speed, false);
 		// move to next cut
-		add_move(1, - 7.9375 + double(c) * 0.01, 0.500, false);
+		add_move(1,   7.5000 - double(c) * 0.1, -cut_speed, false);
 	}
+
+	for (int32_t c=0; c<14; c++) {
+    	add_move(1, std::max(6.2500,7.500 - double(c) * 0.1), -cut_speed, false);
+		add_move(0, + 5.7500, +0.100, false);
+    	add_move(1,  10.0000, +cut_speed, false);
+		add_move(0,   0.0000, -cut_speed, false);
+    }
 
 	convert_and_print();
 	
