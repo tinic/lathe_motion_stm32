@@ -162,22 +162,22 @@ void CommThread::run() {
             std::string cmd("H0");
             send_command(fd, cmd);
             read_response(fd, bad_crc);
-        } else {
-            if ((status_packet.current_mode>>16) != 9 &&
-                (status_packet.current_mode>>16) != 10) {
-                if (newzfeed != 0.0 && newxfeed != 0.0) {
-                    std::string cmd("FB");
-                    send_command(fd, cmd);
-                    read_response(fd, bad_crc);
-                } else if (newzfeed != 0.0) {
-                    std::string cmd("FZ");
-                    send_command(fd, cmd);
-                    read_response(fd, bad_crc);
-                } else {
-                    std::string cmd("FX");
-                    send_command(fd, cmd);
-                    read_response(fd, bad_crc);
-                }
+        }
+
+        if (setfollow) {
+            setfollow = false;
+            if (newzfeed != 0.0 && newxfeed != 0.0) {
+                std::string cmd("FB");
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
+            } else if (newzfeed != 0.0) {
+                std::string cmd("FZ");
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
+            } else {
+                std::string cmd("FX");
+                send_command(fd, cmd);
+                read_response(fd, bad_crc);
             }
         }
 

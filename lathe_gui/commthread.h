@@ -37,6 +37,7 @@ public:
 
     double newzfeed;
     double newxfeed;
+
     bool setzero;
     bool setfollow;
     bool idle;

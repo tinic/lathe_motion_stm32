@@ -238,6 +238,7 @@ void MainWindow::zeroButtonClicked()
 {
     commThread.mutex.lock();
     commThread.setzero = true;
+    commThread.setfollow = true;
     commThread.mutex.unlock();
 }
 
