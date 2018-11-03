@@ -119,7 +119,7 @@ volatile uint16_t       led_delay_count = 0;
 //-----------------------------------------------------------------
 
 static const int32_t one_active_axis_timer = 0x200;
-static const int32_t all_active_axis_timer = 0x400;
+static const int32_t all_active_axis_timer = 0x280;
 
 static int32_t absolute_pos = 0;
 static int32_t absolute_idx = 0;
@@ -156,6 +156,7 @@ static int32_t cycle_counter = 0;
 struct cycle_entry {
     uint8_t target_axs;
     uint8_t wait_for_index_zero;
+    uint16_t dummy;
     int32_t target_pos;
     int32_t stepper_mul_z;
     int32_t stepper_div_z;
@@ -165,7 +166,7 @@ struct cycle_entry {
     int32_t stepper_div_d;
 };
 
-static const size_t current_cycle_max = 400;
+static const size_t current_cycle_max = 512; // 16KB
 static cycle_entry current_cycle[current_cycle_max];
 static size_t current_cycle_idx = 0;
 static size_t current_cycle_len = 0;
@@ -286,6 +287,7 @@ static uint8_t get_char(uint8_t *c)
 volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
 
 static void parse(void);
+static void set_current_run_mode(run_mode mode);
 
 #ifdef __cplusplus
 extern "C" {
@@ -406,48 +408,72 @@ void TIM2_IRQHandler(void)
 		switch (current_run_mode) {
 			case    run_mode_follow_zxd: {
 						if (flip_z) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
-							int32_t v = stepper_follow_div_z;
-							stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_z += stepper_off_z;
+                            if (stepper_follow_mul_z == 0) {
+							    stepper_target_pos_z = stepper_off_z;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
+							    int32_t v = stepper_follow_div_z;
+							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_z += stepper_off_z;
+                            }
 						}
 						
 						if (flip_x) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
-							int32_t v = stepper_follow_div_x;
-							stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_x += stepper_off_x;
+                            if (stepper_follow_mul_x == 0) {
+							    stepper_target_pos_x = stepper_off_x;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
+							    int32_t v = stepper_follow_div_x;
+							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_x += stepper_off_x;
+                            }
 						}
 						
 						if (flip_d) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
-							int32_t v = stepper_follow_div_d;
-							stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_d += stepper_off_d;
+                            if (stepper_follow_mul_d == 0) {
+							    stepper_target_pos_d = stepper_off_d;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
+							    int32_t v = stepper_follow_div_d;
+							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_d += stepper_off_d;
+                            }
 						}
 					} break;
 			case    run_mode_follow_z: {
 						if (flip_z) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
-							int32_t v = stepper_follow_div_z;
-							stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_z += stepper_off_z;
+                            if (stepper_follow_mul_z == 0) {
+							    stepper_target_pos_z = stepper_off_z;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
+							    int32_t v = stepper_follow_div_z;
+							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_z += stepper_off_z;
+                            }
 						}
 					} break;
 			case    run_mode_follow_x: {
 						if (flip_x) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
-							int32_t v = stepper_follow_div_x;
-							stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_x += stepper_off_x;
+                            if (stepper_follow_mul_x == 0) {
+							    stepper_target_pos_x = stepper_off_x;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
+							    int32_t v = stepper_follow_div_x;
+							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_x += stepper_off_x;
+                            }
 						}
 					} break;
 			case    run_mode_follow_d: {
 						if (flip_d) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
-							int32_t v = stepper_follow_div_d;
-							stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_d += stepper_off_d;
+                            if (stepper_follow_mul_d == 0) {
+							    stepper_target_pos_d = stepper_off_d;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
+							    int32_t v = stepper_follow_div_d;
+							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_d += stepper_off_d;
+                            }
 						}
 					} break;
 			case    run_mode_cycle_pause:
@@ -455,26 +481,38 @@ void TIM2_IRQHandler(void)
 						const cycle_entry &e = current_cycle[current_cycle_idx];
 
 						if (flip_z) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_z);
-							int32_t v = e.stepper_div_z;
-							stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_z += stepper_off_z;
+                            if (e.stepper_mul_z == 0) {
+							    stepper_target_pos_z = stepper_off_z;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_z);
+							    int32_t v = e.stepper_div_z;
+							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_z += stepper_off_z;      
+                            }
 						}
 						
 						if (flip_x) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_x);
-							int32_t v = e.stepper_div_x;
-							stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_x += stepper_off_x;
+                            if (e.stepper_mul_x == 0) {
+							    stepper_target_pos_x = stepper_off_x;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_x);
+							    int32_t v = e.stepper_div_x;
+							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_x += stepper_off_x;
+                            }
 						}
 						
 						if (flip_d) {
-							int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_d);
-							int32_t v = e.stepper_div_d;
-							stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							stepper_target_pos_d += stepper_off_d;
+                            if (e.stepper_mul_d == 0) {
+							    stepper_target_pos_d = stepper_off_d;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_d);
+							    int32_t v = e.stepper_div_d;
+							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_d += stepper_off_d;
+                            }
 						}
-						
+
 						bool do_next_cycle_step = false;
 						switch(e.target_axs) {
 							case 0: {
@@ -528,6 +566,10 @@ void TIM2_IRQHandler(void)
 								index_zero_occured = 0;
 							}
 							__enable_irq();
+                            if (current_cycle_idx == current_cycle_len) {
+                                current_cycle_idx = 0;
+                                set_current_run_mode(run_mode_none);
+                            }
 						}
 						
 					} break;
@@ -814,7 +856,7 @@ static void send_ok_response()
 
 static void parse(void) {
     uint8_t in_char;
-    static char buf[256];
+    static char buf[128];
     static size_t buf_pos = 0;
     while(get_char(&in_char)) {
         if(in_char != '\n') {
@@ -951,6 +993,24 @@ static void parse(void) {
                                 break;
                             }
 
+                            int32_t prev_target_z = 0;
+                            int32_t prev_target_x = 0;
+                            int32_t prev_target_d = 0;
+
+                            for (uint32_t c = 0; c < current_cycle_len; c++) {
+                                switch(current_cycle[c].target_axs) {
+                                    case 0: {
+                                        prev_target_z = current_cycle[c].target_pos; 
+                                    } break;
+                                    case 1: {
+                                        prev_target_x = current_cycle[c].target_pos; 
+                                    } break;
+                                    case 2: {
+                                        prev_target_d = current_cycle[c].target_pos; 
+                                    } break;
+                                }
+                            }
+
                             cycle_entry entry;
                             entry.target_axs = (buf[pos] == 'X') ? 1 : ( (buf[pos] == 'D') ? 2 : 0); pos++;
 							
@@ -977,6 +1037,42 @@ static void parse(void) {
                             int32_t gcd_z = gcd(entry.stepper_mul_z, entry.stepper_div_z); entry.stepper_mul_z /= gcd_z; entry.stepper_div_z /= gcd_z;
                             int32_t gcd_x = gcd(entry.stepper_mul_x, entry.stepper_div_x); entry.stepper_mul_x /= gcd_x; entry.stepper_div_x /= gcd_x;
                             int32_t gcd_d = gcd(entry.stepper_mul_d, entry.stepper_div_d); entry.stepper_mul_d /= gcd_d; entry.stepper_div_d /= gcd_d;
+
+                            switch(entry.target_axs) {
+                                case 0: {
+                                    if (entry.stepper_mul_z < 0 && entry.target_pos <= prev_target_z) {
+                                        ok_to_run = false;
+                                    }
+                                    if (entry.stepper_mul_z > 0 && entry.target_pos >= prev_target_z) {
+                                        ok_to_run = false;
+                                    }
+                                    if (entry.stepper_mul_z == 0 && entry.target_pos != prev_target_z) {
+                                        ok_to_run = false;
+                                    }
+                                } break;
+                                case 1: {
+                                    if (entry.stepper_mul_x < 0 && entry.target_pos <= prev_target_x) {
+                                        ok_to_run = false;
+                                    }
+                                    if (entry.stepper_mul_x > 0 && entry.target_pos >= prev_target_x) {
+                                        ok_to_run = false;
+                                    }
+                                    if (entry.stepper_mul_x == 0 && entry.target_pos != prev_target_x) {
+                                        ok_to_run = false;
+                                    }
+                                } break;
+                                case 2: {
+                                    if (entry.stepper_mul_d < 0 && entry.target_pos <= prev_target_d) {
+                                        ok_to_run = false;
+                                    }
+                                    if (entry.stepper_mul_d > 0 && entry.target_pos >= prev_target_d) {
+                                        ok_to_run = false;
+                                    }
+                                    if (entry.stepper_mul_d == 0 && entry.target_pos != prev_target_d) {
+                                        ok_to_run = false;
+                                    }
+                                } break;
+                            }
 
                             current_cycle[current_cycle_len++]= entry;
 
