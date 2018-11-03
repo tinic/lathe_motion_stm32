@@ -7,12 +7,6 @@
 #include "globals.h"
 #include "main.h"
 
-//#define LIB_DIVIDE
-
-#ifdef LIB_DIVIDE
-#include "libdivide.h"
-#endif // #ifdef LIB_DIVIDE
-
 // led
 #define LED_DELAY_MS        128
 #define LED_PORT            GPIOC
@@ -46,9 +40,7 @@ static int32_t gcd(int32_t u, int32_t v) {
     return int32_t(gcd_impl(abs(u),abs(v)));
 }
 
-#ifndef LIB_DIVIDE
 static inline uint32_t divlu(uint32_t u1, uint32_t u0, uint32_t v) {
-
 	const uint32_t b = 65536;
  
 	int32_t s = __builtin_clz(v);
@@ -96,7 +88,6 @@ again2:
 }
 
 static inline int32_t divls(int32_t u1, uint32_t u0, int32_t v) {
-	
 	int32_t uneg = u1 >> 31;
 	if (uneg) {
 		u0 = -u0;
@@ -111,10 +102,8 @@ static inline int32_t divls(int32_t u1, uint32_t u0, int32_t v) {
 
 	int32_t diff = uneg ^ vneg;
 	q = (q ^ diff) - diff;
-
 	return q;
 }
-#endif  // #ifndef LIB_DIVIDE
 
 typedef enum
 {
@@ -131,9 +120,6 @@ volatile uint16_t       led_delay_count = 0;
 
 static const int32_t one_active_axis_timer = 0x200;
 static const int32_t all_active_axis_timer = 0x400;
-
-static int32_t error_state_out_of_sync = 0;
-static int32_t error_index_offset = 0;
 
 static int32_t absolute_pos = 0;
 static int32_t absolute_idx = 0;
@@ -152,39 +138,18 @@ static int32_t stepper_off_z = 0;
 
 static int32_t stepper_follow_mul_z = 0;
 static int32_t stepper_follow_div_z = 0;
-#ifdef LIB_DIVIDE
-static libdivide::libdivide_s64_t stepper_follow_div_z_opt;
-#endif  // #ifdef LIB_DIVIDE
-
-static int32_t stepper_jog_dir_z = 0;
-static int32_t stepper_jog_tck_z = 0;
-static int32_t stepper_jog_tim_z = 0;
 
 static int32_t stepper_actual_pos_x = 0;
 static int32_t stepper_off_x = 0;
 
 static int32_t stepper_follow_mul_x = 0;
 static int32_t stepper_follow_div_x = 0;
-#ifdef LIB_DIVIDE
-static libdivide::libdivide_s64_t stepper_follow_div_x_opt;
-#endif  // #ifdef LIB_DIVIDE
-
-static int32_t stepper_jog_dir_x = 0;
-static int32_t stepper_jog_tck_x = 0;
-static int32_t stepper_jog_tim_x = 0;
 
 static int32_t stepper_actual_pos_d = 0;
 static int32_t stepper_off_d = 0;
 
 static int32_t stepper_follow_mul_d = 0;
 static int32_t stepper_follow_div_d = 0;
-#ifdef LIB_DIVIDE
-static libdivide::libdivide_s64_t stepper_follow_div_d_opt;
-#endif  //#ifdef LIB_DIVIDE
-
-static int32_t stepper_jog_dir_d = 0;
-static int32_t stepper_jog_tck_d = 0;
-static int32_t stepper_jog_tim_d = 0;
 
 static int32_t cycle_counter = 0;
 
@@ -194,19 +159,10 @@ struct cycle_entry {
     int32_t target_pos;
     int32_t stepper_mul_z;
     int32_t stepper_div_z;
-#ifdef LIB_DIVIDE
-    libdivide::libdivide_s64_t stepper_div_z_opt;
-#endif  // #ifdef LIB_DIVIDE
     int32_t stepper_mul_x;
     int32_t stepper_div_x;
-#ifdef LIB_DIVIDE
-    libdivide::libdivide_s64_t stepper_div_x_opt;
-#endif  // #ifdef LIB_DIVIDE
     int32_t stepper_mul_d;
     int32_t stepper_div_d;
-#ifdef LIB_DIVIDE
-    libdivide::libdivide_s64_t stepper_div_d_opt;
-#endif  // #ifdef LIB_DIVIDE
 };
 
 static const size_t current_cycle_max = 400;
@@ -222,10 +178,6 @@ enum run_mode {
     run_mode_follow_x,
     run_mode_follow_d,
     run_mode_follow_zxd,
-    
-    run_mode_jog_z,
-    run_mode_jog_x,
-    run_mode_jog_d,
     
     run_mode_cycle,
     run_mode_cycle_pause
@@ -335,104 +287,6 @@ volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
 
 static void parse(void);
 
-static struct {
-  int32_t run_state;
-  int32_t dir;
-  int32_t step_delay;
-  int32_t decel_start;
-  int32_t decel_val;
-  int32_t min_delay;
-  int32_t accel_count;
-} jog_state;
-
-enum {
-	STOP = 0,
-	ACCEL = 1,
-	DECEL = 2,
-	RUN = 3,
-};
-
-static uint32_t sqrt(uint32_t x)
-{
-	uint32_t xr;
-	uint32_t q2;
-	uint8_t f;
-	xr = 0; 
-	q2 = 0x40000000L;
-	do {
-		if((xr + q2) <= x) {
-			x -= xr + q2;
-			f = 1;
-		} else {
-			f = 0;
-		}
-		xr >>= 1;
-		if(f) {
-			xr += q2;
-		}
-	} while(q2 >>= 2);
-	if(xr < x) {
-		return xr +1;
-	} else {
-		return xr;
-	}
-}
-
-static void jog_calc_step_delay_time() {
-	int32_t new_step_delay;
-	static int32_t last_accel_delay = 0;
-	static int32_t step_count = 0;
-	static int32_t rest = 0;
-
-	switch(jog_state.run_state) {
-		case STOP: {
-				step_count = 0;
-				rest = 0;
-			} break;
-
-		case ACCEL: {
-				step_count ++;
-				jog_state.accel_count++;
-				new_step_delay = jog_state.step_delay - (((2 * (int32_t)jog_state.step_delay) + rest) / (4 * jog_state.accel_count + 1));
-				rest = ((2 * (int32_t)jog_state.step_delay)+rest) % (4 * jog_state.accel_count + 1);
-				if(step_count >= jog_state.decel_start) {
-					jog_state.accel_count = jog_state.decel_val;
-					jog_state.run_state = DECEL;
-				}
-				else if(new_step_delay <= jog_state.min_delay) {
-					last_accel_delay = new_step_delay;
-					new_step_delay = jog_state.min_delay;
-					rest = 0;
-					jog_state.run_state = RUN;
-				}
-			} break;
-
-		case RUN: {
-				step_count ++;
-				new_step_delay = jog_state.min_delay;
-				if(step_count >= jog_state.decel_start) {
-					jog_state.accel_count = jog_state.decel_val;
-					new_step_delay = last_accel_delay;
-					jog_state.run_state = DECEL;
-				}
-			} break;
-
-		case DECEL: {
-				step_count ++;
-				jog_state.accel_count++;
-				new_step_delay = jog_state.step_delay - (((2 * (int32_t)jog_state.step_delay) + rest) / (4 * jog_state.accel_count + 1));
-				rest = ((2 * (int32_t)jog_state.step_delay)+rest) % (4 * jog_state.accel_count + 1);
-				if(jog_state.accel_count >= 0){
-					jog_state.run_state = STOP;
-				}
-			} break;
-	}
-
-	TIM2->ARR = one_active_axis_timer;
-
-	jog_state.step_delay = new_step_delay;
-}
-
 #ifdef __cplusplus
 extern "C" {
 #endif  // #ifdef __cplusplus
@@ -489,11 +343,6 @@ void EXTI1_IRQHandler(void)
 
     EXTI->PR |= EXTI_PR_PR1;
 
-    if (cnt != 3 && cnt != -3 &&
-        cnt != 2880 && cnt != -2880) {
-        error_index_offset = (int32_t)cnt;
-    }
-    
     if (cnt == 2880 || cnt == -2880) {
         index_zero_occured = 1;
     }
@@ -547,59 +396,148 @@ void TIM2_IRQHandler(void)
         __enable_irq();
 
         static uint32_t flip_z = 0;
-        if (flip_z) {
-            // by default, don't move
-            int32_t stepper_target_pos_z = stepper_actual_pos_z;
+        static uint32_t flip_x = 0;
+        static uint32_t flip_d = 0;
 
-            switch (current_run_mode) {
-                case    run_mode_follow_zxd:
-                case    run_mode_follow_z: {
-#ifndef LIB_DIVIDE
-                            int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
-                            int32_t v = stepper_follow_div_z;
-                            stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-#else  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_z = libdivide::libdivide_s64_do(int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z), &stepper_follow_div_z_opt);
-#endif  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_z += stepper_off_z;
-                        } break;
-                case    run_mode_jog_z: {
-                			jog_calc_step_delay_time();
-                			if (jog_state.run_state != STOP) {
-                				if (jog_state.dir > 0) {
-	                				stepper_target_pos_z++;
-	                			}
-                				if (jog_state.dir < 0) {
-	                				stepper_target_pos_z--;
-	                			}
-                			}
-                        } break;
-                case    run_mode_cycle_pause:
-                case    run_mode_cycle: {
-#ifndef LIB_DIVIDE
-                            int64_t u = int64_t(absolute_actual_pos) * int64_t(current_cycle[current_cycle_idx].stepper_mul_z);
-                            int32_t v = current_cycle[current_cycle_idx].stepper_div_z;
-                            stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-#else  // #ifdef LIB_DIVIDE
-                            int32_t mul_z = current_cycle[current_cycle_idx].stepper_mul_z;
-                            const libdivide::libdivide_s64_t &div_z_opt = current_cycle[current_cycle_idx].stepper_div_z_opt;
-                            stepper_target_pos_z = libdivide::libdivide_s64_do(int64_t(absolute_actual_pos) * int64_t(mul_z), &div_z_opt);
-#endif  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_z += stepper_off_z;
-                        } break;
-                default: {
-                        } break;
-            }
+		int32_t stepper_target_pos_z = stepper_actual_pos_z;
+		int32_t stepper_target_pos_x = stepper_actual_pos_x;
+		int32_t stepper_target_pos_d = stepper_actual_pos_d;
+
+		switch (current_run_mode) {
+			case    run_mode_follow_zxd: {
+						if (flip_z) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
+							int32_t v = stepper_follow_div_z;
+							stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_z += stepper_off_z;
+						}
+						
+						if (flip_x) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
+							int32_t v = stepper_follow_div_x;
+							stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_x += stepper_off_x;
+						}
+						
+						if (flip_d) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
+							int32_t v = stepper_follow_div_d;
+							stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_d += stepper_off_d;
+						}
+					} break;
+			case    run_mode_follow_z: {
+						if (flip_z) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
+							int32_t v = stepper_follow_div_z;
+							stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_z += stepper_off_z;
+						}
+					} break;
+			case    run_mode_follow_x: {
+						if (flip_x) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
+							int32_t v = stepper_follow_div_x;
+							stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_x += stepper_off_x;
+						}
+					} break;
+			case    run_mode_follow_d: {
+						if (flip_d) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
+							int32_t v = stepper_follow_div_d;
+							stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_d += stepper_off_d;
+						}
+					} break;
+			case    run_mode_cycle_pause:
+			case    run_mode_cycle: {
+						const cycle_entry &e = current_cycle[current_cycle_idx];
+
+						if (flip_z) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_z);
+							int32_t v = e.stepper_div_z;
+							stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_z += stepper_off_z;
+						}
+						
+						if (flip_x) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_x);
+							int32_t v = e.stepper_div_x;
+							stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_x += stepper_off_x;
+						}
+						
+						if (flip_d) {
+							int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_d);
+							int32_t v = e.stepper_div_d;
+							stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							stepper_target_pos_d += stepper_off_d;
+						}
+						
+						bool do_next_cycle_step = false;
+						switch(e.target_axs) {
+							case 0: {
+								if (e.stepper_mul_z <= 0) {
+									if (stepper_actual_pos_z >= e.target_pos) {
+										do_next_cycle_step = true;
+									}   
+								} else {
+									if (stepper_actual_pos_z <= e.target_pos) {
+										do_next_cycle_step = true;
+									}   
+								}
+							} break;
+							case 1: {
+								if (e.stepper_mul_x <= 0) {
+									if (stepper_actual_pos_x >= e.target_pos) {
+										do_next_cycle_step = true;
+									}
+								} else {
+									if (stepper_actual_pos_x <= e.target_pos) {
+										do_next_cycle_step = true;
+									}
+								}
+							} break;
+							case 2: {
+								if (e.stepper_mul_d <= 0) {
+									if (stepper_actual_pos_d >= e.target_pos) {
+										do_next_cycle_step = true;
+									}
+								} else {
+									if (stepper_actual_pos_d <= e.target_pos) {
+										do_next_cycle_step = true;
+									}
+								}
+							} break;
+						}
+
+						if (do_next_cycle_step) {
+							__disable_irq();
+							stepper_off_z = stepper_actual_pos_z;
+							stepper_off_x = stepper_actual_pos_x;
+							stepper_off_d = stepper_actual_pos_d;
+							absolute_pos = 0;
+							absolute_pos_start_offset = cnt;
+							current_cycle_idx++;
+							if (current_cycle_idx == current_cycle_len) {
+								current_run_mode = run_mode_none;
+							}
+							if (current_cycle[current_cycle_idx].wait_for_index_zero) {
+								wait_for_index_zero = 1;
+								index_zero_occured = 0;
+							}
+							__enable_irq();
+						}
+						
+					} break;
+			default: {
+					} break;
+		}
             
+        if (flip_z) {
             int32_t szdelta = stepper_target_pos_z - stepper_actual_pos_z;
-
-            if (abs(szdelta) >= 2880) {
-                error_state_out_of_sync = szdelta;
-            }
-
-            if (szdelta == 0) {
-                // nop
-            } else if (szdelta < 0) {
+            if (szdelta < 0) {
                 if (stepper_dir_z != -1) {
                     stepper_dir_z = -1;
                     GPIOB->BSRR = GPIO_BSRR_BR14;
@@ -622,66 +560,13 @@ void TIM2_IRQHandler(void)
                 }
             }
         } else {
-			if (current_run_mode == run_mode_jog_z) {
-				TIM2->ARR = jog_state.step_delay;
-			}
             GPIOB->BSRR = GPIO_BSRR_BR13;
             flip_z ^= 1;
         }
 
-        static uint32_t flip_x = 0;
         if (flip_x) {
-            int32_t stepper_target_pos_x = stepper_actual_pos_x;
-            
-            switch (current_run_mode) {
-                case    run_mode_follow_zxd:
-                case    run_mode_follow_x: {
-#ifndef LIB_DIVIDE
-                            int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
-                            int32_t v = stepper_follow_div_x;
-                            stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-#else  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_x = libdivide::libdivide_s64_do(int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x), &stepper_follow_div_x_opt);
-#endif  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_x += stepper_off_x;
-                        } break;
-                case    run_mode_jog_x: {
-                			jog_calc_step_delay_time();
-                			if (jog_state.run_state != STOP) {
-                				if (jog_state.dir > 0) {
-	                				stepper_target_pos_x++;
-	                			}
-                				if (jog_state.dir < 0) {
-	                				stepper_target_pos_x--;
-	                			}
-                			}
-                        } break;
-                case    run_mode_cycle_pause:
-                case    run_mode_cycle: {
-#ifndef LIB_DIVIDE
-                            int64_t u = int64_t(absolute_actual_pos) * int64_t(current_cycle[current_cycle_idx].stepper_mul_x);
-                            int32_t v = current_cycle[current_cycle_idx].stepper_div_x;
-                            stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-#else  // #ifdef LIB_DIVIDE
-                            int32_t mul_x = current_cycle[current_cycle_idx].stepper_mul_x;
-                            const libdivide::libdivide_s64_t &div_x_opt = current_cycle[current_cycle_idx].stepper_div_x_opt;
-                            stepper_target_pos_x = libdivide::libdivide_s64_do(int64_t(absolute_actual_pos) * int64_t(mul_x), &div_x_opt);
-#endif  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_x += stepper_off_x;
-                        } break;
-                default: {
-                        } break;
-            }
-
             int32_t sxdelta = stepper_target_pos_x - stepper_actual_pos_x;
-
-            if (abs(sxdelta) >= 2880) {
-                error_state_out_of_sync = sxdelta;
-            }
-
-            if (sxdelta == 0) {
-                // nop
-            } else if (sxdelta < 0) {
+            if (sxdelta < 0) {
                 if (stepper_dir_x != -1) {
                     stepper_dir_x = -1;
                     GPIOB->BSRR = GPIO_BSRR_BR5;
@@ -704,66 +589,13 @@ void TIM2_IRQHandler(void)
                 }
             }
         } else {
-			if (current_run_mode == run_mode_jog_x) {
-				TIM2->ARR = jog_state.step_delay;
-			}
             GPIOB->BSRR = GPIO_BSRR_BR11;
             flip_x ^= 1;
         }
 
-        static uint32_t flip_d = 0;
         if (flip_d) {
-            int32_t stepper_target_pos_d = stepper_actual_pos_d;
-            
-            switch (current_run_mode) {
-                case    run_mode_follow_zxd:
-                case    run_mode_follow_d: {
-#ifndef LIB_DIVIDE
-                            int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
-                            int32_t v = stepper_follow_div_d;
-                            stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-#else  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_d = libdivide::libdivide_s64_do(int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d), &stepper_follow_div_d_opt);
-#endif  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_d += stepper_off_d;
-                        } break;
-                case    run_mode_jog_d: {
-                			jog_calc_step_delay_time();
-                			if (jog_state.run_state != STOP) {
-                				if (jog_state.dir > 0) {
-	                				stepper_target_pos_d++;
-	                			}
-                				if (jog_state.dir < 0) {
-	                				stepper_target_pos_d--;
-	                			}
-                			}
-                        } break;
-                case    run_mode_cycle_pause:
-                case    run_mode_cycle: {
-#ifndef LIB_DIVIDE
-                            int64_t u = int64_t(absolute_actual_pos) * int64_t(current_cycle[current_cycle_idx].stepper_mul_d);
-                            int32_t v = current_cycle[current_cycle_idx].stepper_div_d;
-                            stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-#else  // #ifdef LIB_DIVIDE
-                            int32_t mul_d = current_cycle[current_cycle_idx].stepper_mul_d;
-                            const libdivide::libdivide_s64_t &div_d_opt = current_cycle[current_cycle_idx].stepper_div_d_opt;
-                            stepper_target_pos_d = libdivide::libdivide_s64_do(int64_t(absolute_actual_pos) * int64_t(mul_d), &div_d_opt);
-#endif  // #ifdef LIB_DIVIDE
-                            stepper_target_pos_d += stepper_off_d;
-                        } break;
-                default: {
-                        } break;
-            }
-
             int32_t sddelta = stepper_target_pos_d - stepper_actual_pos_d;
-
-            if (abs(sddelta) >= 2880) {
-                error_state_out_of_sync = sddelta;
-            }
-
-            if (sddelta == 0) {
-                // nop
-            } else if (sddelta < 0) {
+            if (sddelta < 0) {
                 if (stepper_dir_d != -1) {
                     stepper_dir_d = -1;
                     // wait until next cycle to do the pulse
@@ -782,70 +614,9 @@ void TIM2_IRQHandler(void)
                 }
             }
         } else {
-			if (current_run_mode == run_mode_jog_d) {
-				TIM2->ARR = jog_state.step_delay;
-			}
             flip_d ^= 1;
         }
-
-        if (current_run_mode == run_mode_cycle ||
-            current_run_mode == run_mode_cycle_pause) {
-            __disable_irq();
-            bool do_next_cycle_step = false;
-            if (current_cycle[current_cycle_idx].target_axs == 0) {
-                if (current_cycle[current_cycle_idx].stepper_mul_z <= 0) {
-                    if (stepper_actual_pos_z >= current_cycle[current_cycle_idx].target_pos) {
-                        stepper_off_z = stepper_actual_pos_z;
-                        do_next_cycle_step = true;
-                    }   
-                } else {
-                    if (stepper_actual_pos_z <= current_cycle[current_cycle_idx].target_pos) {
-                        stepper_off_z = stepper_actual_pos_z;
-                        do_next_cycle_step = true;
-                    }   
-                }
-            }
-            if (current_cycle[current_cycle_idx].target_axs == 1) {
-                if (current_cycle[current_cycle_idx].stepper_mul_x <= 0) {
-                    if (stepper_actual_pos_x >= current_cycle[current_cycle_idx].target_pos) {
-                        stepper_off_x = stepper_actual_pos_x;
-                        do_next_cycle_step = true;
-                    }
-                } else {
-                    if (stepper_actual_pos_x <= current_cycle[current_cycle_idx].target_pos) {
-                        stepper_off_x = stepper_actual_pos_x;
-                        do_next_cycle_step = true;
-                    }
-                }
-            }
-            if (current_cycle[current_cycle_idx].target_axs == 2) {
-                if (current_cycle[current_cycle_idx].stepper_mul_d <= 0) {
-                    if (stepper_actual_pos_d >= current_cycle[current_cycle_idx].target_pos) {
-                        stepper_off_d = stepper_actual_pos_d;
-                        do_next_cycle_step = true;
-                    }
-                } else {
-                    if (stepper_actual_pos_d <= current_cycle[current_cycle_idx].target_pos) {
-                        stepper_off_d = stepper_actual_pos_d;
-                        do_next_cycle_step = true;
-                    }
-                }
-            }
-            if (do_next_cycle_step) {
-                absolute_pos = 0;
-                absolute_pos_start_offset = cnt;
-                current_cycle_idx++;
-                if (current_cycle_idx == current_cycle_len) {
-                    current_run_mode = run_mode_none;
-                }
-                if (current_cycle[current_cycle_idx].wait_for_index_zero) {
-                    wait_for_index_zero = 1;
-                    index_zero_occured = 0;
-                }
-            }
-            __enable_irq();
-        }
-
+        
         cycle_counter = *DWT_CYCCNT;
     }
 }
@@ -987,9 +758,6 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
     if (axis == 0) {
         stepper_follow_mul_z = mul;
         stepper_follow_div_z = (mul != 0) ? div : 1;
-#ifdef LIB_DIVIDE
-        stepper_follow_div_z_opt = libdivide::libdivide_s64_gen(stepper_follow_div_z);
-#endif  // #ifdef LIB_DIVIDE
 
         stepper_off_z = stepper_actual_pos_z;
 
@@ -1000,9 +768,6 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
     if (axis == 1) {
         stepper_follow_mul_x = mul;
         stepper_follow_div_x =(mul != 0) ? div : 1;
-#ifdef LIB_DIVIDE
-        stepper_follow_div_x_opt = libdivide::libdivide_s64_gen(stepper_follow_div_x);
-#endif  //#ifdef LIB_DIVIDE
 
         stepper_off_x = stepper_actual_pos_x;
 
@@ -1013,9 +778,6 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
     if (axis == 2) {
         stepper_follow_mul_d = mul;
         stepper_follow_div_d =(mul != 0) ? div : 1;
-#ifdef LIB_DIVIDE
-        stepper_follow_div_d_opt = libdivide::libdivide_s64_gen(stepper_follow_div_d);
-#endif  //#ifdef LIB_DIVIDE
 
         stepper_off_d = stepper_actual_pos_d;
 
@@ -1136,82 +898,6 @@ static void parse(void) {
                             }
                         } break;
                         
-                case 'J': {
-                            if (buf_pos < (1 + 1 + 32) || (buf[1] != 'Z' && buf[1] != 'X' && buf[1] != 'D')) {
-                                send_invalid_response();
-                            } else {
-                            	if (buf[1] == 'Z') {
-									set_current_run_mode(run_mode_jog_z);
-                            	} else if (buf[1] == 'X') {
-									set_current_run_mode(run_mode_jog_x);
-                            	} else if (buf[1] == 'D') {
-									set_current_run_mode(run_mode_jog_d);
-                            	}
-                            
-								int32_t step = 0;
-								int32_t accel = 0;
-								int32_t decel = 0;
-								int32_t speed = 0;
-
-                                sscanf(&buf[2],"%08x%08x%08x%08x",  
-                                	(unsigned int *)&step, 	
-									(unsigned int *)&accel, 
-									(unsigned int *)&decel, 
-									(unsigned int *)&speed);
-
-								uint32_t max_s_lim;
-								uint32_t accel_lim;
-
-								if(step < 0) {
-									jog_state.dir = -1;
-									step = -step;
-								}
-								else {
-									jog_state.dir = +1;
-								}
-
-								#define T1_FREQ 1382400
-								#define ALPHA (2*3.14159/3200)
-								#define A_T_x100 ((int32_t)(ALPHA*T1_FREQ*100)) 
-								#define T1_FREQ_148 ((int32_t)((T1_FREQ*0.676)/100))
-								#define A_SQ (int32_t)(ALPHA*2*10000000000)
-								#define A_x20000 (int32_t)(ALPHA*20000)
-
-								jog_state.min_delay = A_T_x100 / speed;
-								jog_state.step_delay = (T1_FREQ_148 * sqrt(A_SQ / accel))/100;
-								max_s_lim = (int32_t)speed*speed/(int32_t)(((int32_t)A_x20000*accel)/100);
-								if(max_s_lim == 0) {
-									max_s_lim = 1;
-								}
-								accel_lim = ((int32_t)step*decel) / (accel+decel);
-								if(accel_lim == 0) {
-									accel_lim = 1;
-								}
-								if(accel_lim <= max_s_lim) {
-									jog_state.decel_val = accel_lim - step;
-								}
-								else{
-									jog_state.decel_val = -((int32_t)max_s_lim*accel)/decel;
-								}
-								if(jog_state.decel_val == 0) {
-									jog_state.decel_val = -1;
-								}
-								jog_state.decel_start = step + jog_state.decel_val;
-								if(jog_state.step_delay <= jog_state.min_delay){
-									jog_state.step_delay = jog_state.min_delay;
-									jog_state.run_state = RUN;
-								}
-								else {
-									jog_state.run_state = ACCEL;
-								}
-								jog_state.accel_count = 0;
-
-								TIM2->ARR = jog_state.step_delay;
-								
-                                send_ok_response();
-							}
-                		} break;
-                        
                 case 'C': {
                             size_t pos = 1;
                             bool ok_to_run = true;
@@ -1292,12 +978,6 @@ static void parse(void) {
                             int32_t gcd_x = gcd(entry.stepper_mul_x, entry.stepper_div_x); entry.stepper_mul_x /= gcd_x; entry.stepper_div_x /= gcd_x;
                             int32_t gcd_d = gcd(entry.stepper_mul_d, entry.stepper_div_d); entry.stepper_mul_d /= gcd_d; entry.stepper_div_d /= gcd_d;
 
-#ifdef LIB_DIVIDE
-                            entry.stepper_div_z_opt = libdivide::libdivide_s64_gen(entry.stepper_div_z);
-                            entry.stepper_div_x_opt = libdivide::libdivide_s64_gen(entry.stepper_div_x);
-                            entry.stepper_div_d_opt = libdivide::libdivide_s64_gen(entry.stepper_div_d);
-#endif  // #ifdef LIB_DIVIDE
-                            
                             current_cycle[current_cycle_len++]= entry;
 
                             if (current_cycle_len >= current_cycle_max) {
@@ -1365,15 +1045,6 @@ static void parse(void) {
                             for (size_t c=0; c<pos; c++) {
                                 put_char(sts[c]);
                             }
-
-                            // Clear errors
-                            if (error_state_out_of_sync) {
-                                error_state_out_of_sync = 0;
-                            }
-
-                            if (error_index_offset) {
-                                error_index_offset = 0;
-                            }
                         } break;
 
                 default: {
@@ -1400,37 +1071,16 @@ static void init_constants()
     
     stepper_follow_mul_z = -60; // 0.1mm/rev
     stepper_follow_div_z = 1143;
-#ifdef LIB_DIVIDE
-    stepper_follow_div_z_opt = libdivide::libdivide_s64_gen(stepper_follow_div_z);
-#endif  // #ifdef LIB_DIVIDE
     
-    stepper_jog_dir_z = 0; // direction is undefined by default
-    stepper_jog_tck_z = 100;
-    stepper_jog_tim_z = 100;
-
     stepper_actual_pos_x = 0;
     
     stepper_follow_mul_x = 60 / 2; // 0.05mm/rev
     stepper_follow_div_x = 1143;
-#ifdef LIB_DIVIDE
-    stepper_follow_div_x_opt = libdivide::libdivide_s64_gen(stepper_follow_div_x);
-#endif  // #ifdef LIB_DIVIDE
-
-    stepper_jog_dir_x = 0; // direction is undefined by default
-    stepper_jog_tck_x = 100;
-    stepper_jog_tim_x = 100;
 
     stepper_actual_pos_d = 0;
 
     stepper_follow_mul_d = 0;
     stepper_follow_div_d = 1;
-#ifdef LIB_DIVIDE
-    stepper_follow_div_d_opt = libdivide::libdivide_s64_gen(stepper_follow_div_d);
-#endif  // #ifdef LIB_DIVIDE
-
-    stepper_jog_dir_d = 0; // direction is undefined by default
-    stepper_jog_tck_d = 100;
-    stepper_jog_tim_d = 100;
 }
 
 static void init_systick(void)
