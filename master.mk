@@ -66,6 +66,7 @@ INCLUDE += -I$(DEVICEINC)
 CFLAGS   = -Ofast
 # https://bugs.launchpad.net/gcc-arm-embedded/+bug/1747966
 CFLAGS  += -flto -fno-function-sections -fno-data-sections
+#CFLAGS  += -mfloat-abi=softfp
 CFLAGS	+= -Wall 
 CFLAGS	+= -fno-common 
 CFLAGS	+= -mthumb 
@@ -88,6 +89,7 @@ LDFLAGS  = -T$(DEVICELINKER)
 LDFLAGS += -flto -fno-function-sections -fno-data-sections
 LDFLAGS	+= -mthumb 
 LDFLAGS	+= -mcpu=$(ARMCPU)
+#LDFLAGS += -mfloat-abi=softfp
 #LDFLAGS	+= -specs=rdimon.specs
 LDFLAGS += --specs=nosys.specs
 LDFLAGS += --specs=nano.specs

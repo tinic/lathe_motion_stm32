@@ -217,7 +217,14 @@ struct cycle_entry {
     int32_t stepper_div_d;
 };
 
+#ifdef STM32F103xB
 static const size_t current_cycle_max = 512; // 16KB
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+static const size_t current_cycle_max = 8192; // 256KB
+#endif  // #ifdef STM32F767xx
+
 static cycle_entry current_cycle[current_cycle_max];
 static size_t current_cycle_idx = 0;
 static size_t current_cycle_len = 0;
@@ -1346,8 +1353,29 @@ static void init_usart(uint32_t baudrate)
 #endif  // #ifdef STM32F103xB
 
 #ifdef STM32F767xx
-    RCC->APB2ENR    |= RCC_APB2ENR_USART1EN;    // enable USART1 clock
+    RCC->APB1ENR |= RCC_AHB1ENR_GPIOAEN; // enable GPIO clock for Port A
+    RCC->APB2ENR |= RCC_APB2ENR_USART1EN; // enable USART1 clock
 
+    GPIOA->MODER &= ~(GPIO_MODER_MODER9);  // reset PA9
+    GPIOA->MODER &= ~(GPIO_MODER_MODER10);  // reset PA10
+
+    GPIOA->MODER |= GPIO_MODER_MODER9_1; // Set to alt mode
+    GPIOA->MODER |= GPIO_MODER_MODER10_1; // Set to alt mode
+
+    GPIOA->AFR[1] &= ~(GPIO_AFRH_AFRH1);
+    GPIOA->AFR[1] &= ~(GPIO_AFRH_AFRH2);
+
+    GPIOA->AFR[1] |= GPIO_AFRH_AFRH1_0 | GPIO_AFRH_AFRH1_1 | GPIO_AFRH_AFRH1_2; // set to AF7 mode (USART1_TX)
+    GPIOA->AFR[1] |= GPIO_AFRH_AFRH2_0 | GPIO_AFRH_AFRH2_1 | GPIO_AFRH_AFRH2_2; // set to AF7 mode (USART1_RX)
+
+    // configure USART1 registers
+    uint32_t baud   = (uint32_t)(SystemCoreClock/baudrate);
+    USART1->BRR     = baud;
+    USART1->CR1     = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE | USART_CR1_UE;
+
+    // configure NVIC
+    NVIC_EnableIRQ(USART1_IRQn);
+    NVIC_SetPriority(USART1_IRQn, 255);
 #endif  // #ifdef STM32F767xx
 
 }
@@ -1412,7 +1440,7 @@ static void init_qenc()
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;  // enable TIM1 clock
 
     GPIOA->MODER &= ~(GPIO_MODER_MODER6);  // reset PA6
-    GPIOA->MODER &= ~(GPIO_MODER_MODER6);  // reset PA7
+    GPIOA->MODER &= ~(GPIO_MODER_MODER7);  // reset PA7
 
     GPIOA->MODER |= GPIO_MODER_MODER6_1;
     GPIOA->MODER |= GPIO_MODER_MODER7_1;
