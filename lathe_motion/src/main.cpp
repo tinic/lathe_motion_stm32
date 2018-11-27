@@ -1324,11 +1324,12 @@ static void init_led(void)
 
 static void init_usart(uint32_t baudrate)
 {
+    RCC->APB2ENR |= RCC_APB2ENR_USART1EN; // enable USART1 clock
+
 #ifdef STM32F103xB
     // UART on pins PB6 and PB7
     RCC->APB2ENR    |= RCC_APB2ENR_AFIOEN;  // enable AFIO clock
     RCC->APB2ENR    |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN | RCC_APB2ENR_IOPCEN;// enable GPIOA, GPIOB, GPIOC clock
-    RCC->APB2ENR    |= RCC_APB2ENR_USART1EN;    // enable USART1 clock
 
     //use AFIO_MAPR register to remap alternate functions to use USART 1 TX and RX on PB6 and PB7
     //Ref 7.4.2 and 6.3.7 in st manual
@@ -1342,19 +1343,10 @@ static void init_usart(uint32_t baudrate)
     GPIOB->CRL |= GPIO_CRL_CNF6_1;    // PB6: output @ 50MHz - Alt-function Push-pull
     GPIOB->CRL |= GPIO_CRL_CNF7_0;    // PB7 RX - Mode = 0b00 (input) - CNF = 0b01 (input floating)
     
-    // configure USART1 registers
-    uint32_t baud   = (uint32_t)(SystemCoreClock/baudrate);
-    USART1->BRR     = baud;
-    USART1->CR1     = USART_CR1_TE | USART_CR1_RE | USART_CR1_RXNEIE | USART_CR1_UE;
-    
-    // configure NVIC
-    NVIC_EnableIRQ(USART1_IRQn);
-    NVIC_SetPriority(USART1_IRQn, 255);
 #endif  // #ifdef STM32F103xB
 
 #ifdef STM32F767xx
     RCC->APB1ENR |= RCC_AHB1ENR_GPIOAEN; // enable GPIO clock for Port A
-    RCC->APB2ENR |= RCC_APB2ENR_USART1EN; // enable USART1 clock
 
     GPIOA->MODER &= ~(GPIO_MODER_MODER9);  // reset PA9
     GPIOA->MODER &= ~(GPIO_MODER_MODER10);  // reset PA10
@@ -1368,6 +1360,8 @@ static void init_usart(uint32_t baudrate)
     GPIOA->AFR[1] |= GPIO_AFRH_AFRH1_0 | GPIO_AFRH_AFRH1_1 | GPIO_AFRH_AFRH1_2; // set to AF7 mode (USART1_TX)
     GPIOA->AFR[1] |= GPIO_AFRH_AFRH2_0 | GPIO_AFRH_AFRH2_1 | GPIO_AFRH_AFRH2_2; // set to AF7 mode (USART1_RX)
 
+#endif  // #ifdef STM32F767xx
+
     // configure USART1 registers
     uint32_t baud   = (uint32_t)(SystemCoreClock/baudrate);
     USART1->BRR     = baud;
@@ -1376,22 +1370,42 @@ static void init_usart(uint32_t baudrate)
     // configure NVIC
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 255);
-#endif  // #ifdef STM32F767xx
-
 }
 
 static void init_qenc()
 {
     // setup A/B quadrature on timer 3 periph
-
-#ifdef STM32F103xB
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;  // enable TIM3 clock
 
+#ifdef STM32F103xB
+   // PA6 - A
+   // PA7 - B
+   // PA1 - Z
     GPIOA->CRL &= ~(GPIO_CRL_CNF6 | GPIO_CRL_MODE6);  // reset PA6
     GPIOA->CRL &= ~(GPIO_CRL_CNF7 | GPIO_CRL_MODE7);  // reset PA7
 
     GPIOA->CRL |= GPIO_CRL_CNF6_1;
     GPIOA->CRL |= GPIO_CRL_CNF7_1;
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+   // PA6 - A (CN12 -> Pin 13)
+   // PA7 - B (CN12 -> Pin 15)
+   // PA1 - Z (CN11 -> Pin 30)
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+
+    GPIOA->MODER &= ~(GPIO_MODER_MODER6);  // reset PA6
+    GPIOA->MODER &= ~(GPIO_MODER_MODER7);  // reset PA7
+
+    GPIOA->MODER |= GPIO_MODER_MODER6_1;
+    GPIOA->MODER |= GPIO_MODER_MODER7_1;
+    
+    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL6); 
+    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL7);
+
+    GPIOA->AFR[0] |= GPIO_AFRL_AFRL6_2;
+    GPIOA->AFR[0] |= GPIO_AFRL_AFRL7_2;
+#endif  // #ifdef STM32F767xx
 
     TIM3->SR = 0;
     TIM3->CNT = 0;
@@ -1416,64 +1430,16 @@ static void init_qenc()
     NVIC_EnableIRQ(TIM3_IRQn);
     NVIC_SetPriority(TIM3_IRQn, 3);
 
+#ifdef STM32F103xB
     // setup Z/Index on pin PA1
-
-    RCC->APB2ENR    |= RCC_APB2ENR_AFIOEN;  // enable AFIO clock
-
+    RCC->APB2ENR |= RCC_APB2ENR_AFIOEN;  // enable AFIO clock
     AFIO->EXTICR[0] |= AFIO_EXTICR1_EXTI1_PA; // Select EXT1
-
-    EXTI->IMR |= EXTI_IMR_MR1;
-    EXTI->FTSR |= EXTI_FTSR_TR1;
-
-    // configure NVIC
-    NVIC_EnableIRQ(EXTI1_IRQn);
-    NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
 #endif  // #ifdef STM32F103xB
 
 #ifdef STM32F767xx
-   // PA6 - A (CN12 -> Pin 13)
-   // PA7 - B (CN12 -> Pin 15)
-   // PA1 - Z (CN11 -> Pin 30)
-
-	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
-
-    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;  // enable TIM1 clock
-
-    GPIOA->MODER &= ~(GPIO_MODER_MODER6);  // reset PA6
-    GPIOA->MODER &= ~(GPIO_MODER_MODER7);  // reset PA7
-
-    GPIOA->MODER |= GPIO_MODER_MODER6_1;
-    GPIOA->MODER |= GPIO_MODER_MODER7_1;
-    
-    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL6); 
-    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL7);
-
-    GPIOA->AFR[0] |= GPIO_AFRL_AFRL6_2;
-    GPIOA->AFR[0] |= GPIO_AFRL_AFRL7_2;
-
-    TIM3->CCMR1 &= ~(TIM_CCMR1_CC1S); 
-    TIM3->CCMR1 |= TIM_CCMR1_CC1S_0; // connect TI1
-
-    TIM3->CCMR1 &= ~(TIM_CCMR1_CC2S);
-    TIM3->CCMR1 |= TIM_CCMR1_CC2S_0; // connect TI2
-
-    TIM3->CCER &= ~(TIM_CCER_CC1P);  
-    TIM3->CCER &= ~(TIM_CCER_CC1NP); 
-
-    TIM3->CCER &= ~(TIM_CCER_CC2P);
-    TIM3->CCER &= ~(TIM_CCER_CC2NP); 
-
-    TIM3->SMCR &= ~(TIM_SMCR_SMS);
-    TIM3->SMCR |= TIM_SMCR_SMS_0 | TIM_SMCR_SMS_1;
-
-    TIM3->CR1  |= TIM_CR1_CEN; // turn on counter
-
-    NVIC_EnableIRQ(TIM3_IRQn);
-    NVIC_SetPriority(TIM3_IRQn, 3);
-
-    // setup Z/Index on pin PA1
-
+	RCC->APB2ENR |= RCC_APB2ENR_SYSCFGEN; // enable SYCFG clock
     SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI1_PA; // Select EXT1
+#endif  // #ifdef STM32F767xx
 
     EXTI->IMR |= EXTI_IMR_MR1;
     EXTI->FTSR |= EXTI_FTSR_TR1;
@@ -1481,7 +1447,7 @@ static void init_qenc()
     // configure NVIC
     NVIC_EnableIRQ(EXTI1_IRQn);
     NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
-#endif  // #ifdef STM32F767xx
+    
 }
 
 static void init_stepper_pins()
