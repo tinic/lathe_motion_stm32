@@ -3,19 +3,70 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+
+#ifdef STM32F103xB
 #include "stm32f1xx.h"
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+#include "stm32f7xx.h"
+#endif  // #ifdef STM32F767xx
+
 #include "globals.h"
 #include "main.h"
 
 // led
 #define LED_DELAY_MS        128
+
+#ifdef STM32F103xB
 #define LED_PORT            GPIOC
-#define LED_CR              CRH
 #define LED_SET             GPIO_BSRR_BS13
 #define LED_RESET           GPIO_BSRR_BR13
-#define LED_PORT_RESET_BITS GPIO_CRH_MODE13 | GPIO_CRH_CNF13
-#define LED_PORT_SET_BITS   GPIO_CRH_MODE13_1 | GPIO_CRH_MODE13_0
-#define LED_CLOCK           RCC_APB2ENR_IOPCEN
+
+#define PIN_ENA_1_Z GPIOB->BSRR = GPIO_BSRR_BS15
+#define PIN_ENA_0_Z GPIOB->BSRR = GPIO_BSRR_BR15
+
+#define PIN_PUL_1_Z GPIOB->BSRR = GPIO_BSRR_BS13
+#define PIN_PUL_0_Z GPIOB->BSRR = GPIO_BSRR_BR13
+
+#define PIN_DIR_1_Z GPIOB->BSRR = GPIO_BSRR_BS14
+#define PIN_DIR_0_Z GPIOB->BSRR = GPIO_BSRR_BR14
+
+#define PIN_ENA_1_X GPIOB->BSRR = GPIO_BSRR_BS15
+#define PIN_ENA_0_X GPIOB->BSRR = GPIO_BSRR_BR15
+
+#define PIN_PUL_1_X GPIOB->BSRR = GPIO_BSRR_BS11
+#define PIN_PUL_0_X GPIOB->BSRR = GPIO_BSRR_BR11
+
+#define PIN_DIR_1_X GPIOB->BSRR = GPIO_BSRR_BS5
+#define PIN_DIR_0_X GPIOB->BSRR = GPIO_BSRR_BR5
+
+#endif   // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+#define LED_PORT            GPIOB
+#define LED_SET             GPIO_BSRR_BS_14
+#define LED_RESET           GPIO_BSRR_BR_14
+
+#define PIN_ENA_1_Z GPIOE->BSRR = GPIO_BSRR_BS_9
+#define PIN_ENA_0_Z GPIOE->BSRR = GPIO_BSRR_BR_9
+
+#define PIN_PUL_1_Z GPIOE->BSRR = GPIO_BSRR_BS_10
+#define PIN_PUL_0_Z GPIOE->BSRR = GPIO_BSRR_BR_10
+
+#define PIN_DIR_1_Z GPIOE->BSRR = GPIO_BSRR_BS_11
+#define PIN_DIR_0_Z GPIOE->BSRR = GPIO_BSRR_BR_11
+
+#define PIN_ENA_1_X GPIOE->BSRR = GPIO_BSRR_BS_12
+#define PIN_ENA_0_X GPIOE->BSRR = GPIO_BSRR_BR_12
+
+#define PIN_PUL_1_X GPIOE->BSRR = GPIO_BSRR_BS_13
+#define PIN_PUL_0_X GPIOE->BSRR = GPIO_BSRR_BR_13
+
+#define PIN_DIR_1_X GPIOE->BSRR = GPIO_BSRR_BS_14
+#define PIN_DIR_0_X GPIOE->BSRR = GPIO_BSRR_BR_14
+
+#endif  // #ifdef STM32F767xx
 
 static uint32_t gcd_impl(uint32_t u, uint32_t v)
 {
@@ -242,8 +293,15 @@ static uint16_t CRC16(const uint8_t *data, size_t len)
 
 static void put_char(uint8_t byte)
 {
+#ifdef STM32F103xB
     USART1->DR = (int)(byte);
     while (!(USART1->SR & USART_SR_TXE));
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+    USART1->RDR = (int)(byte);
+    while (!(USART1->ISR & USART_ISR_TXE));
+#endif  // #ifdef STM32F767xx
 }
 
 typedef struct {
@@ -324,8 +382,15 @@ void SysTick_Handler(void)
 
 void USART1_IRQHandler(void)
 {
+#ifdef STM32F103xB
     uint8_t in_char = (USART1->DR & 0xFF);
     buffer_char(in_char);
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+    uint8_t in_char = (USART1->RDR & 0xFF);
+    buffer_char(in_char);
+#endif  // #ifdef STM32F767xx
 }
 
 void EXTI1_IRQHandler(void)
@@ -383,8 +448,8 @@ void TIM2_IRQHandler(void)
             if (index_zero_occured) {
                 index_zero_occured = 0;
                 wait_for_index_zero = 0;
-                absolute_pos_start_offset = cnt;
-                absolute_pos = 0;
+                absolute_pos_start_offset = 0;
+                absolute_pos = cnt;
                 absolute_actual_pos = 0;
                 stepper_off_z = stepper_actual_pos_z;
                 stepper_off_x = stepper_actual_pos_x;
@@ -405,7 +470,7 @@ void TIM2_IRQHandler(void)
 		int32_t stepper_target_pos_x = stepper_actual_pos_x;
 		int32_t stepper_target_pos_d = stepper_actual_pos_d;
 
-		switch (current_run_mode) {
+		if (flip_z || flip_x || flip_d) switch (current_run_mode) {
 			case    run_mode_follow_zxd: {
 						if (flip_z) {
                             if (stepper_follow_mul_z == 0) {
@@ -478,41 +543,9 @@ void TIM2_IRQHandler(void)
 					} break;
 			case    run_mode_cycle_pause:
 			case    run_mode_cycle: {
+
 						const cycle_entry &e = current_cycle[current_cycle_idx];
-
-						if (flip_z) {
-                            if (e.stepper_mul_z == 0) {
-							    stepper_target_pos_z = stepper_off_z;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_z);
-							    int32_t v = e.stepper_div_z;
-							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_z += stepper_off_z;      
-                            }
-						}
-						
-						if (flip_x) {
-                            if (e.stepper_mul_x == 0) {
-							    stepper_target_pos_x = stepper_off_x;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_x);
-							    int32_t v = e.stepper_div_x;
-							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_x += stepper_off_x;
-                            }
-						}
-						
-						if (flip_d) {
-                            if (e.stepper_mul_d == 0) {
-							    stepper_target_pos_d = stepper_off_d;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_d);
-							    int32_t v = e.stepper_div_d;
-							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_d += stepper_off_d;
-                            }
-						}
-
+			
 						bool do_next_cycle_step = false;
 						switch(e.target_axs) {
 							case 0: {
@@ -569,9 +602,43 @@ void TIM2_IRQHandler(void)
                             if (current_cycle_idx == current_cycle_len) {
                                 current_cycle_idx = 0;
                                 set_current_run_mode(run_mode_none);
+                                return;
+                            }
+						}
+
+						if (flip_z) {
+                            if (e.stepper_mul_z == 0) {
+							    stepper_target_pos_z = stepper_off_z;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_z);
+							    int32_t v = e.stepper_div_z;
+							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_z += stepper_off_z;      
                             }
 						}
 						
+						if (flip_x) {
+                            if (e.stepper_mul_x == 0) {
+							    stepper_target_pos_x = stepper_off_x;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_x);
+							    int32_t v = e.stepper_div_x;
+							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_x += stepper_off_x;
+                            }
+						}
+						
+						if (flip_d) {
+                            if (e.stepper_mul_d == 0) {
+							    stepper_target_pos_d = stepper_off_d;      
+                            } else {
+							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_d);
+							    int32_t v = e.stepper_div_d;
+							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
+							    stepper_target_pos_d += stepper_off_d;
+                            }
+						}
+
 					} break;
 			default: {
 					} break;
@@ -582,27 +649,27 @@ void TIM2_IRQHandler(void)
             if (szdelta < 0) {
                 if (stepper_dir_z != -1) {
                     stepper_dir_z = -1;
-                    GPIOB->BSRR = GPIO_BSRR_BR14;
+                    PIN_DIR_0_Z;
                     // wait until next cycle to do the pulse
                 } else {
                     stepper_actual_pos_z--;
-                    GPIOB->BSRR = GPIO_BSRR_BS13;
+                    PIN_PUL_1_Z;
                     flip_z ^= 1;
                 }
             } else if (szdelta > 0) {
                 if (stepper_dir_z != +1) {
                     stepper_dir_z = +1;
-                    GPIOB->BSRR = GPIO_BSRR_BS14;        
+                    PIN_DIR_1_Z;        
                     // wait until next cycle to do the pulse
                 } else {
                     // now do the actual pulse
                     stepper_actual_pos_z++;
-                    GPIOB->BSRR = GPIO_BSRR_BS13;
+                    PIN_PUL_1_Z;
                     flip_z ^= 1;
                 }
             }
         } else {
-            GPIOB->BSRR = GPIO_BSRR_BR13;
+            PIN_PUL_0_Z;
             flip_z ^= 1;
         }
 
@@ -611,27 +678,27 @@ void TIM2_IRQHandler(void)
             if (sxdelta < 0) {
                 if (stepper_dir_x != -1) {
                     stepper_dir_x = -1;
-                    GPIOB->BSRR = GPIO_BSRR_BR5;
+                    PIN_DIR_0_X;
                     // wait until next cycle to do the pulse
                 } else {
                     stepper_actual_pos_x--;
-                    GPIOB->BSRR = GPIO_BSRR_BS11;
+                    PIN_PUL_1_X;
                     flip_x ^= 1;
                 }
             } else if (sxdelta > 0) {
                 if (stepper_dir_x != +1) {
                     stepper_dir_x = +1;
-                    GPIOB->BSRR = GPIO_BSRR_BS5;
+                    PIN_DIR_1_X;
                     // wait until next cycle to do the pulse
                 } else {
                     // now do the actual pulse
                     stepper_actual_pos_x++;
-                    GPIOB->BSRR = GPIO_BSRR_BS11;
+                    PIN_PUL_1_X;
                     flip_x ^= 1;
                 }
             }
         } else {
-            GPIOB->BSRR = GPIO_BSRR_BR11;
+            PIN_PUL_0_X;
             flip_x ^= 1;
         }
 
@@ -695,32 +762,32 @@ static void maybe_enable_steppers()
 {
     if (current_run_mode == run_mode_idle) {
         // Z axis
-        GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+        PIN_ENA_1_Z; // set to high disables driver
         // X axis
-        GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+        PIN_ENA_1_X; // set to high disables driver
         return;
     }
     if (current_run_mode == run_mode_none) {
         switch (previous_run_mode) {
             case    run_mode_follow_z: {
                         // X axis 
-                        GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+                        PIN_ENA_1_X; // set to high disables driver
                     } break;
             case    run_mode_follow_x: {
                         // Z axis
-                        GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+                        PIN_ENA_1_Z; // set to high disables driver
                     } break;
             case    run_mode_follow_zxd: {
                         // X axis
-                        GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+                        PIN_ENA_1_X; // set to high disables driver
                         //Z axis
-                        GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+                        PIN_ENA_1_Z; // set to high disables driver
                     } break;
             default: {
                         // Z axis
-                        GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+                        PIN_ENA_1_Z; // set to high disables driver
                         // X axis
-                        GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+                        PIN_ENA_1_X; // set to high disables driver
                     } break;
         }
         return;
@@ -729,27 +796,27 @@ static void maybe_enable_steppers()
     switch (current_run_mode) {
         case    run_mode_follow_z: {
                     // X axis
-                    GPIOB->BSRR = GPIO_BSRR_BS15; // set to high disables driver
+                    PIN_ENA_1_X; // set to high disables driver
                     // Z axis
-                    GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+                    PIN_ENA_0_Z; // set to low enables driver
                 } break;
         case    run_mode_follow_x: {
                     // Z axis
-                    GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+                    PIN_ENA_1_Z; // set to high disables driver
                     // X axis
-                    GPIOB->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+                    PIN_ENA_0_X; // set to low enables driver
                 } break;
         case    run_mode_follow_d: {
                     // Z axis
-                    GPIOB->BSRR = GPIO_BSRR_BS12; // set to high disables driver
+                    PIN_ENA_1_Z; // set to high disables driver
                     // X axis
-                    GPIOB->BSRR = GPIO_BSRR_BS15; // set to high enables driver
+                    PIN_ENA_1_X; // set to high enables driver
                 } break;
         default: {
                     // X axis
-                    GPIOB->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+                    PIN_ENA_0_X; // set to low enables driver
                     // Z axis
-                    GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+                    PIN_ENA_0_Z; // set to low enables driver
                 } break;
     }
 }
@@ -841,7 +908,7 @@ static void send_bad_crc_response()
 static void send_invalid_response()
 {
     const char *response = "INVALID6E66\n";
-    for (size_t c=0; c<1; c++) {
+    for (size_t c=0; c<12; c++) {
         put_char(response[c]);
     }
 }
@@ -1187,6 +1254,7 @@ static void init_systick(void)
 
 static void init_clock(void)
 {
+#ifdef STM32F103xB
     // Conf clock : 72MHz using HSE 8MHz crystal w/ PLL X 9 (8MHz x 9 = 72MHz)
     FLASH->ACR      |= FLASH_ACR_LATENCY_2; // Two wait states, per datasheet
     RCC->CFGR       |= RCC_CFGR_PPRE1_2;    // prescale AHB1 = HCLK/2
@@ -1203,17 +1271,53 @@ static void init_clock(void)
     while( !(RCC->CFGR & RCC_CFGR_SWS_PLL) );    // wait for PLL to be CLK
     
     SystemCoreClockUpdate();                // calculate the SYSCLOCK value
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+    FLASH->ACR      |= FLASH_ACR_LATENCY_4WS; // Four wait states
+    while ((FLASH->ACR & FLASH_ACR_LATENCY) != FLASH_ACR_LATENCY_4WS);
+
+    RCC->CR         |= RCC_CR_HSEON;        // enable HSE clock
+    while( !(RCC->CR & RCC_CR_HSERDY) );    // wait for the HSEREADY flag
+
+	//
+	// Set to 216Mhz using HSE 8Mhz crystal w/ PLL
+	//
+	// Default on startup (96Mhz):
+	//
+	// PLLP  == 2
+	// PLLN  == 192
+	// PLLM  == 16
+	//
+	RCC->PLLCFGR &= ~(RCC_PLLCFGR_PLLM); // PLLP = 2
+	RCC->PLLCFGR |= RCC_PLLCFGR_PLLM_2; // PLLM = 4
+	RCC->PLLCFGR |= RCC_PLLCFGR_PLLN_3 | RCC_PLLCFGR_PLLN_4 | RCC_PLLCFGR_PLLN_6 | RCC_PLLCFGR_PLLN_7; // PLLN = 216;
+    RCC->CR |= RCC_CR_PLLON;        // enable the PLL
+    while( !(RCC->CR & RCC_CR_PLLRDY) );    // wait for the PLLRDY flag
+
+    RCC->CFGR |= RCC_CFGR_SW_PLL;     // set clock source to pll
+    while( !(RCC->CFGR & RCC_CFGR_SWS_PLL) );    // wait for PLL to be CLK
+
+    SystemCoreClockUpdate();                // calculate the SYSCLOCK value
+#endif  // #ifdef STM32F767xx
 }
 
 static void init_led(void)
 {
-    RCC->APB2ENR        |= LED_CLOCK;               // enable GPIO clock for LED
-    LED_PORT->LED_CR    &= ~(LED_PORT_RESET_BITS);  // reset pin MODE / CNF
-    LED_PORT->LED_CR    |=  (LED_PORT_SET_BITS);    // MODE: 50Mhz ouput CNF: PP
+#ifdef STM32F103xB
+    RCC->APB2ENR |= RCC_APB2ENR_IOPCEN; // enable GPIO clock for LED
+    LED_PORT->CRH    &= ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13);  // reset pin MODE / CNF
+    LED_PORT->CRH    |=  (GPIO_CRH_MODE13_1 | GPIO_CRH_MODE13_0);    // MODE: 50Mhz ouput CNF: PP
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+    RCC->APB1ENR |= RCC_AHB1ENR_GPIOAEN; // enable GPIO clock for LED
+#endif  // #ifdef STM32F767xx
 }
 
 static void init_usart(uint32_t baudrate)
 {
+#ifdef STM32F103xB
     // UART on pins PB6 and PB7
     RCC->APB2ENR    |= RCC_APB2ENR_AFIOEN;  // enable AFIO clock
     RCC->APB2ENR    |= RCC_APB2ENR_IOPAEN | RCC_APB2ENR_IOPBEN | RCC_APB2ENR_IOPCEN;// enable GPIOA, GPIOB, GPIOC clock
@@ -1239,16 +1343,24 @@ static void init_usart(uint32_t baudrate)
     // configure NVIC
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 255);
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+    RCC->APB2ENR    |= RCC_APB2ENR_USART1EN;    // enable USART1 clock
+
+#endif  // #ifdef STM32F767xx
+
 }
 
 static void init_qenc()
 {
     // setup A/B quadrature on timer 3 periph
 
+#ifdef STM32F103xB
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;  // enable TIM3 clock
 
-    GPIOA->CRL &= ~(GPIO_CRL_CNF6 | GPIO_CRL_MODE6);  // reset PA8
-    GPIOA->CRL &= ~(GPIO_CRL_CNF7 | GPIO_CRL_MODE7);  // reset PA9
+    GPIOA->CRL &= ~(GPIO_CRL_CNF6 | GPIO_CRL_MODE6);  // reset PA6
+    GPIOA->CRL &= ~(GPIO_CRL_CNF7 | GPIO_CRL_MODE7);  // reset PA7
 
     GPIOA->CRL |= GPIO_CRL_CNF6_1;
     GPIOA->CRL |= GPIO_CRL_CNF7_1;
@@ -1288,46 +1400,148 @@ static void init_qenc()
     // configure NVIC
     NVIC_EnableIRQ(EXTI1_IRQn);
     NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+   // PA6 - A (CN12 -> Pin 13)
+   // PA7 - B (CN12 -> Pin 15)
+   // PA1 - Z (CN11 -> Pin 30)
+
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOAEN;
+
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;  // enable TIM1 clock
+
+    GPIOA->MODER &= ~(GPIO_MODER_MODER6);  // reset PA6
+    GPIOA->MODER &= ~(GPIO_MODER_MODER6);  // reset PA7
+
+    GPIOA->MODER |= GPIO_MODER_MODER6_1;
+    GPIOA->MODER |= GPIO_MODER_MODER7_1;
+    
+    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL6); 
+    GPIOA->AFR[0] &= ~(GPIO_AFRL_AFRL7);
+
+    GPIOA->AFR[0] |= GPIO_AFRL_AFRL6_2;
+    GPIOA->AFR[0] |= GPIO_AFRL_AFRL7_2;
+
+    TIM3->CCMR1 &= ~(TIM_CCMR1_CC1S); 
+    TIM3->CCMR1 |= TIM_CCMR1_CC1S_0; // connect TI1
+
+    TIM3->CCMR1 &= ~(TIM_CCMR1_CC2S);
+    TIM3->CCMR1 |= TIM_CCMR1_CC2S_0; // connect TI2
+
+    TIM3->CCER &= ~(TIM_CCER_CC1P);  
+    TIM3->CCER &= ~(TIM_CCER_CC1NP); 
+
+    TIM3->CCER &= ~(TIM_CCER_CC2P);
+    TIM3->CCER &= ~(TIM_CCER_CC2NP); 
+
+    TIM3->SMCR &= ~(TIM_SMCR_SMS);
+    TIM3->SMCR |= TIM_SMCR_SMS_0 | TIM_SMCR_SMS_1;
+
+    TIM3->CR1  |= TIM_CR1_CEN; // turn on counter
+
+    NVIC_EnableIRQ(TIM3_IRQn);
+    NVIC_SetPriority(TIM3_IRQn, 3);
+
+    // setup Z/Index on pin PA1
+
+    SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI1_PA; // Select EXT1
+
+    EXTI->IMR |= EXTI_IMR_MR1;
+    EXTI->FTSR |= EXTI_FTSR_TR1;
+
+    // configure NVIC
+    NVIC_EnableIRQ(EXTI1_IRQn);
+    NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
+#endif  // #ifdef STM32F767xx
 }
 
 static void init_stepper_pins()
 {
+#ifdef STM32F103xB
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN | RCC_APB2ENR_IOPAEN; // Enable GPIOB and GPIOA block
 
     // Z - enable
     GPIOB->CRH &= ~(GPIO_CRH_MODE12 | GPIO_CRH_CNF12);
     GPIOB->CRH |= GPIO_CRH_MODE12_1 | GPIO_CRH_MODE12_0;
-    GPIOB->BSRR = GPIO_BSRR_BR12; // set to low enables driver
+    PIN_ENA_0_X; // set to low enables driver
 
     // Z - pulse/step
     GPIOB->CRH &= ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13);
     GPIOB->CRH |= GPIO_CRH_MODE13_1 | GPIO_CRH_MODE13_0;
-    GPIOB->BSRR = GPIO_BSRR_BS13;
+    PIN_PUL_1_Z;
 
     // Z - dir
     GPIOB->CRH &= ~(GPIO_CRH_MODE14 | GPIO_CRH_CNF14);
     GPIOB->CRH |= GPIO_CRH_MODE14_1 | GPIO_CRH_MODE14_0;
-    GPIOB->BSRR = GPIO_BSRR_BS14;
+    PIN_DIR_1_Z;
 
     // X - enable
     GPIOB->CRH &= ~(GPIO_CRH_MODE15 | GPIO_CRH_CNF15);
     GPIOB->CRH |= GPIO_CRH_MODE15_1 | GPIO_CRH_MODE15_0;
-    GPIOB->BSRR = GPIO_BSRR_BR15; // set to low enables driver
+    PIN_ENA_0_X; // set to low enables driver
 
     // X - pulse/step
     GPIOB->CRH &= ~(GPIO_CRH_MODE11 | GPIO_CRH_CNF11);
     GPIOB->CRH |= GPIO_CRH_MODE11_1 | GPIO_CRH_MODE11_0;
-    GPIOB->BSRR = GPIO_BSRR_BS11;
+    PIN_PUL_1_X;
 
     // X - dir
     GPIOB->CRL &= ~(GPIO_CRL_MODE5 | GPIO_CRL_CNF5);
     GPIOB->CRL |= GPIO_CRL_MODE5_1 | GPIO_CRL_MODE5_0;
-    GPIOB->BSRR = GPIO_BSRR_BS5;
+    PIN_DIR_1_X;
+#endif   // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+	RCC->AHB1ENR |= RCC_AHB1ENR_GPIOEEN;
+
+    // Z - enable
+    GPIOE->MODER &= ~(GPIO_MODER_MODER9); 
+    GPIOE->MODER |= GPIO_MODER_MODER9_1; // output mode 
+    GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR9); 
+    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR9_1; // high speed 
+    PIN_ENA_0_X; // set to low enables driver
+
+    // Z - pulse/step
+    GPIOE->MODER &= ~(GPIO_MODER_MODER10); 
+    GPIOE->MODER |= GPIO_MODER_MODER10_1;// output mode 
+    GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR10); 
+    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR10_1; // high speed 
+    PIN_PUL_1_Z;
+
+    // Z - dir
+    GPIOE->MODER &= ~(GPIO_MODER_MODER11); 
+    GPIOE->MODER |= GPIO_MODER_MODER11_1;// output mode 
+    GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR11); 
+    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR11_1; // high speed  
+    PIN_DIR_1_Z;
+
+    // X - enable
+    GPIOE->MODER &= ~(GPIO_MODER_MODER12); 
+    GPIOE->MODER |= GPIO_MODER_MODER12_1;// output mode 
+    GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR12); 
+    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR12_1; // high speed 
+    PIN_ENA_0_X; // set to low enables driver
+
+    // X - pulse/step
+    GPIOE->MODER &= ~(GPIO_MODER_MODER13);
+    GPIOE->MODER |= GPIO_MODER_MODER13_1;// output mode 
+    GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR13); 
+    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR13_1; // high speed 
+    PIN_PUL_1_X;
+
+    // X - dir
+    GPIOE->MODER &= ~(GPIO_MODER_MODER14);
+    GPIOE->MODER |= GPIO_MODER_MODER14_1;// output mode 
+    GPIOE->OSPEEDR &= ~(GPIO_OSPEEDER_OSPEEDR14); 
+    GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR14_1; // high speed 
+    PIN_DIR_1_X;
+#endif   // #ifdef STM32F767xx
 }
 
 static void init_stepper_sync_timer()
 {
-    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;  // enable TIM3 clock
+    RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;  // enable TIM2 clock
 
     TIM2->CR1 |= TIM_CR1_ARPE | TIM_CR1_URS;
     TIM2->PSC = 1;

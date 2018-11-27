@@ -9,7 +9,7 @@
 #####				  st-flash, stm32flash, stm32loader, openocd, etc.
 #####
 
-BUILDTOOLPATH	= /usr/bin
+BUILDTOOLPATH	= /usr/local/bin
 FLASHTOOLPATH	= /usr/local/bin
 
 ################################################################################
@@ -24,11 +24,11 @@ CMSISBASE 		= ../CMSIS
 CMSISINC 		= $(CMSISBASE)/include
 
 # Device specific, change to either IF-THEN or makefile includes
-DEVICEINC 		= $(CMSISBASE)/Device/STM32F1xx/include
-DEVICESRC	 	= $(CMSISBASE)/Device/STM32F1xx/src
+DEVICEINC 		= $(CMSISBASE)/Device/$(CMSISDEVINC)/include
+DEVICESRC	 	= $(CMSISBASE)/Device/$(CMSISDEVINC)/src
 
-DEVICESTARTUP 	= startup_stm32f103xb.s
-DEVICELINKER 	= $(CMSISBASE)/Device/STM32F1xx/linker/STM32F103XB_FLASH.ld
+DEVICESTARTUP 	= $(CMSISSTARTUPS)
+DEVICELINKER 	= $(CMSISBASE)/Device/$(CMSISDEVINC)/linker/$(CMSISLINKLD)
 
 ################################################################################
 #####
