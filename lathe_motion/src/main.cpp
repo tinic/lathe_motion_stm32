@@ -427,6 +427,17 @@ void EXTI1_IRQHandler(void)
     __enable_irq();
 }
 
+static inline void calc_step(int32_t &stepper_target_pos, int32_t absolute_actual_pos, int32_t stepper_follow_mul, int32_t stepper_follow_div, int32_t stepper_off) {
+	if (stepper_follow_mul == 0) {
+		stepper_target_pos = stepper_off;      
+	} else {
+		int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul);
+		int32_t v = stepper_follow_div;
+		stepper_target_pos = divls(int32_t(u>>32),uint32_t(u), v); 
+		stepper_target_pos += stepper_off;
+	}
+}
+
 void TIM2_IRQHandler(void)
 {
     static int32_t stepper_dir_z = 0; // direction is undefined by default
@@ -480,72 +491,28 @@ void TIM2_IRQHandler(void)
 		if (flip_z || flip_x || flip_d) switch (current_run_mode) {
 			case    run_mode_follow_zxd: {
 						if (flip_z) {
-                            if (stepper_follow_mul_z == 0) {
-							    stepper_target_pos_z = stepper_off_z;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
-							    int32_t v = stepper_follow_div_z;
-							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_z += stepper_off_z;
-                            }
+							calc_step(stepper_target_pos_z, absolute_actual_pos, stepper_follow_mul_z, stepper_follow_div_z, stepper_off_z);
 						}
-						
 						if (flip_x) {
-                            if (stepper_follow_mul_x == 0) {
-							    stepper_target_pos_x = stepper_off_x;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
-							    int32_t v = stepper_follow_div_x;
-							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_x += stepper_off_x;
-                            }
+							calc_step(stepper_target_pos_x, absolute_actual_pos, stepper_follow_mul_x, stepper_follow_div_x, stepper_off_x);
 						}
-						
 						if (flip_d) {
-                            if (stepper_follow_mul_d == 0) {
-							    stepper_target_pos_d = stepper_off_d;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
-							    int32_t v = stepper_follow_div_d;
-							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_d += stepper_off_d;
-                            }
+							calc_step(stepper_target_pos_d, absolute_actual_pos, stepper_follow_mul_d, stepper_follow_div_d, stepper_off_d);
 						}
 					} break;
 			case    run_mode_follow_z: {
 						if (flip_z) {
-                            if (stepper_follow_mul_z == 0) {
-							    stepper_target_pos_z = stepper_off_z;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_z);
-							    int32_t v = stepper_follow_div_z;
-							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_z += stepper_off_z;
-                            }
+							calc_step(stepper_target_pos_z, absolute_actual_pos, stepper_follow_mul_z, stepper_follow_div_z, stepper_off_z);
 						}
 					} break;
 			case    run_mode_follow_x: {
 						if (flip_x) {
-                            if (stepper_follow_mul_x == 0) {
-							    stepper_target_pos_x = stepper_off_x;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_x);
-							    int32_t v = stepper_follow_div_x;
-							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_x += stepper_off_x;
-                            }
+							calc_step(stepper_target_pos_x, absolute_actual_pos, stepper_follow_mul_x, stepper_follow_div_x, stepper_off_x);
 						}
 					} break;
 			case    run_mode_follow_d: {
 						if (flip_d) {
-                            if (stepper_follow_mul_d == 0) {
-							    stepper_target_pos_d = stepper_off_d;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(stepper_follow_mul_d);
-							    int32_t v = stepper_follow_div_d;
-							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_d += stepper_off_d;
-                            }
+							calc_step(stepper_target_pos_d, absolute_actual_pos, stepper_follow_mul_d, stepper_follow_div_d, stepper_off_d);
 						}
 					} break;
 			case    run_mode_cycle_pause:
@@ -614,36 +581,15 @@ void TIM2_IRQHandler(void)
 						}
 
 						if (flip_z) {
-                            if (e.stepper_mul_z == 0) {
-							    stepper_target_pos_z = stepper_off_z;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_z);
-							    int32_t v = e.stepper_div_z;
-							    stepper_target_pos_z = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_z += stepper_off_z;      
-                            }
+							calc_step(stepper_target_pos_z, absolute_actual_pos, e.stepper_mul_z, e.stepper_div_z, stepper_off_z);
 						}
 						
 						if (flip_x) {
-                            if (e.stepper_mul_x == 0) {
-							    stepper_target_pos_x = stepper_off_x;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_x);
-							    int32_t v = e.stepper_div_x;
-							    stepper_target_pos_x = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_x += stepper_off_x;
-                            }
+							calc_step(stepper_target_pos_x, absolute_actual_pos, e.stepper_mul_x, e.stepper_div_x, stepper_off_x);
 						}
 						
 						if (flip_d) {
-                            if (e.stepper_mul_d == 0) {
-							    stepper_target_pos_d = stepper_off_d;      
-                            } else {
-							    int64_t u = int64_t(absolute_actual_pos) * int64_t(e.stepper_mul_d);
-							    int32_t v = e.stepper_div_d;
-							    stepper_target_pos_d = divls(int32_t(u>>32),uint32_t(u), v); 
-							    stepper_target_pos_d += stepper_off_d;
-                            }
+							calc_step(stepper_target_pos_d, absolute_actual_pos, e.stepper_mul_d, e.stepper_div_d, stepper_off_d);
 						}
 
 					} break;
