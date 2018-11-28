@@ -209,31 +209,6 @@ static int32_t stepper_follow_div_d = 0;
 
 static int32_t cycle_counter = 0;
 
-struct cycle_entry {
-    uint8_t target_axs;
-    uint8_t wait_for_index_zero;
-    uint16_t dummy;
-    int32_t target_pos;
-    int32_t stepper_mul_z;
-    int32_t stepper_div_z;
-    int32_t stepper_mul_x;
-    int32_t stepper_div_x;
-    int32_t stepper_mul_d;
-    int32_t stepper_div_d;
-};
-
-#ifdef STM32F103xB
-static const size_t current_cycle_max = 512; // 16KB
-#endif  // #ifdef STM32F103xB
-
-#ifdef STM32F767xx
-static const size_t current_cycle_max = 8192; // 256KB
-#endif  // #ifdef STM32F767xx
-
-static cycle_entry current_cycle[current_cycle_max];
-static size_t current_cycle_idx = 0;
-static size_t current_cycle_len = 0;
-
 enum run_mode {
     run_mode_idle,
     run_mode_none,
@@ -432,6 +407,163 @@ void EXTI1_IRQHandler(void)
     __enable_irq();
 }
 
+static struct cycle_buffer {
+
+	struct cycle_entry {
+		uint8_t target_axs;
+		uint8_t wait_for_index_zero;
+		uint16_t dummy;
+		int32_t target_pos;
+		int32_t stepper_mul_z;
+		int32_t stepper_div_z;
+		int32_t stepper_mul_x;
+		int32_t stepper_div_x;
+		int32_t stepper_mul_d;
+		int32_t stepper_div_d;
+	};
+
+	void reset() {
+		buf_pos = 0;
+		buf_index = 0;
+		next();
+	}
+
+	void clear() {
+		buf_pos = 0;
+		buf_len = 0;
+		buf_index = 0;
+		buf_index_length = 0;
+	}
+	
+	const cycle_entry &current() const {
+		return entry;
+	}
+	
+	uint32_t index() const {
+		return buf_index - 1;
+	}
+
+	uint32_t index_length() const {
+		return buf_index_length;
+	}
+	
+	bool empty() const {
+		return buf_len == 0;
+	}
+	
+	bool atend() const {
+		return buf_pos >= buf_len;
+	}
+	
+	bool atlimit() const {
+		return buf_len >= (sizeof(buf) - sizeof(entry));
+	}
+	
+	void next() {
+		uint8_t flags = buf[buf_pos++];
+		
+		entry.target_axs = flags & 0x03;
+		entry.wait_for_index_zero = flags & 0x20;
+
+		entry.target_pos = read_int32();
+
+		if (flags & 0x04) {
+			entry.stepper_mul_z = read_int32();
+			entry.stepper_div_z = read_int32();
+		} else {
+			entry.stepper_mul_z = 0;
+			entry.stepper_div_z = 0;
+		}
+		if (flags & 0x08) {
+			entry.stepper_mul_x = read_int32();
+			entry.stepper_div_x = read_int32();
+		} else {
+			entry.stepper_mul_x = 0;
+			entry.stepper_div_x = 0;
+		}
+		if (flags & 0x10) {
+			entry.stepper_mul_d = read_int32();
+			entry.stepper_div_d = read_int32();
+		} else {
+			entry.stepper_mul_d = 0;
+			entry.stepper_div_d = 0;
+		}
+		
+		buf_index ++;
+	}
+
+	void push(const cycle_entry &entry) {
+		uint8_t flags = entry.target_axs;
+
+		if (entry.stepper_mul_z || entry.stepper_div_z) {
+			flags |= 0x04;
+		}
+		if (entry.stepper_mul_x || entry.stepper_div_x) {
+			flags |= 0x08;
+		}
+		if (entry.stepper_mul_d || entry.stepper_div_d) {
+			flags |= 0x10;
+		}
+
+		flags |= entry.wait_for_index_zero ? 0x20 : 0;
+		
+		buf[buf_len++] = flags;
+		
+		write_int32(entry.target_pos);
+		
+		if (entry.stepper_mul_z || entry.stepper_div_z) {
+			write_int32(entry.stepper_mul_z);
+			write_int32(entry.stepper_div_z);
+		}
+
+		if (entry.stepper_mul_x || entry.stepper_div_x) {
+			write_int32(entry.stepper_mul_x);
+			write_int32(entry.stepper_div_x);
+		}
+
+		if (entry.stepper_mul_d || entry.stepper_div_d) {
+			write_int32(entry.stepper_mul_d);
+			write_int32(entry.stepper_div_d);
+		}
+		
+		buf_index_length++;
+	}
+	
+private:
+
+	int32_t read_int32() {
+		int32_t res = int32_t((buf[buf_pos+0] << 24) | 
+							  (buf[buf_pos+1] << 16) | 
+							  (buf[buf_pos+2] <<  8) | 
+							  (buf[buf_pos+3] <<  0)); 
+		buf_pos += 4;
+		return res;
+	}
+	
+	void write_int32(int32_t val) {
+		buf[buf_len++] = (uint32_t(val) >> 24) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >> 16) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >>  8) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >>  0) & 0xFF;
+	}
+
+	cycle_entry entry;
+
+#ifdef STM32F103xB
+	uint8_t buf[16384];
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+	uint8_t buf[262144];
+#endif  // #ifdef STM32F767xx
+
+	uint32_t buf_index;
+	uint32_t buf_index_length;
+
+	uint32_t buf_pos;
+	uint32_t buf_len;
+} cycle_buffer;
+
 static inline void calc_step(int32_t &stepper_target_pos, int32_t absolute_actual_pos, int32_t stepper_follow_mul, int32_t stepper_follow_div, int32_t stepper_off) {
 	if (stepper_follow_mul == 0) {
 		stepper_target_pos = stepper_off;      
@@ -444,7 +576,7 @@ static inline void calc_step(int32_t &stepper_target_pos, int32_t absolute_actua
 }
 
 static inline void reload_cycle() {
-	const cycle_entry &e = current_cycle[current_cycle_idx];
+	auto &e = cycle_buffer.current();
 	
 	stepper_target_axis = e.target_axs;
 
@@ -602,14 +734,11 @@ void TIM2_IRQHandler(void)
 							stepper_off_d = stepper_actual_pos_d;
 							absolute_pos = 0;
 							absolute_pos_start_offset = cnt;
-							current_cycle_idx++;
+							cycle_buffer.next();
 							reload_cycle();
-							if (current_cycle_idx == current_cycle_len) {
-								current_run_mode = run_mode_none;
-							}
 							__enable_irq();
-                            if (current_cycle_idx == current_cycle_len) {
-                                current_cycle_idx = 0;
+							if (cycle_buffer.atend()) {
+								cycle_buffer.reset();
                                 set_current_run_mode(run_mode_none);
                                 return;
                             }
@@ -994,6 +1123,10 @@ static void parse(void) {
                         } break;
                         
                 case 'C': {
+                            static int32_t prev_target_z = 0;
+                            static int32_t prev_target_x = 0;
+                            static int32_t prev_target_d = 0;
+
                             size_t pos = 1;
                             bool ok_to_run = true;
 
@@ -1014,8 +1147,9 @@ static void parse(void) {
                             }
 
                             if (buf[pos] == 'S') {
-                                if (current_cycle_len <= 0 ||
-                                    current_cycle_idx >= current_cycle_len) {
+                            	cycle_buffer.reset();
+                                if (cycle_buffer.empty() ||
+                                    cycle_buffer.atend()) {
                                     send_invalid_response();
                                     break;
                                 }
@@ -1035,8 +1169,10 @@ static void parse(void) {
                             set_current_run_mode(run_mode_none);
 
                             if (buf[pos] == 'R') {
-                                current_cycle_len = 0;
-                                current_cycle_idx = 0;
+                            	cycle_buffer.clear();
+                                prev_target_z = 0;
+                                prev_target_x = 0;
+                                prev_target_d = 0;
                                 send_ok_response();
                                 break;
                             }
@@ -1047,25 +1183,7 @@ static void parse(void) {
                                 break;
                             }
 
-                            int32_t prev_target_z = 0;
-                            int32_t prev_target_x = 0;
-                            int32_t prev_target_d = 0;
-
-                            for (uint32_t c = 0; c < current_cycle_len; c++) {
-                                switch(current_cycle[c].target_axs) {
-                                    case 0: {
-                                        prev_target_z = current_cycle[c].target_pos; 
-                                    } break;
-                                    case 1: {
-                                        prev_target_x = current_cycle[c].target_pos; 
-                                    } break;
-                                    case 2: {
-                                        prev_target_d = current_cycle[c].target_pos; 
-                                    } break;
-                                }
-                            }
-
-                            cycle_entry entry;
+                            cycle_buffer::cycle_entry entry;
                             entry.target_axs = (buf[pos] == 'X') ? 1 : ( (buf[pos] == 'D') ? 2 : 0); pos++;
 							
                             uint32_t val = 0;
@@ -1128,17 +1246,29 @@ static void parse(void) {
                                 } break;
                             }
 
-                            current_cycle[current_cycle_len++]= entry;
+							switch(entry.target_axs) {
+								case 0: {
+									prev_target_z = entry.target_pos; 
+								} break;
+								case 1: {
+									prev_target_x = entry.target_pos; 
+								} break;
+								case 2: {
+									prev_target_d = entry.target_pos; 
+								} break;
+							}
 
-                            if (current_cycle_len >= current_cycle_max) {
+							// push cycle
+							cycle_buffer.push(entry);
+
+                            if (cycle_buffer.atlimit()) {
                                 ok_to_run = false;
                             }
 							
                             if (ok_to_run) {
                                 send_ok_response();
                             } else {
-								current_cycle_len = 0;
-								current_cycle_idx = 0;
+                            	cycle_buffer.clear();
 								send_invalid_response();
                             }
                         } break;
@@ -1163,13 +1293,13 @@ static void parse(void) {
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_idx)); pos += 8; 
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(current_index_delta)); pos += 8; 
                             if (current_run_mode == run_mode_cycle) {
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].target_pos)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_mul_z)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_div_z)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_mul_x)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_div_x)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_mul_d)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(current_cycle[current_cycle_idx].stepper_div_d)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().target_pos)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_mul_z)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_div_z)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_mul_x)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_div_x)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_mul_d)); pos += 8; 
+                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_div_d)); pos += 8; 
                             } else {
                                 snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos_start_offset)); pos += 8; 
                                 snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_z)); pos += 8; 
@@ -1180,7 +1310,7 @@ static void parse(void) {
                                 snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_d)); pos += 8; 
                             }
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_counter)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t((current_run_mode<<16) | (current_cycle_len<<8) | (current_cycle_idx) )); pos += 8; 
+                            snprintf(&sts[pos], 32, "%08lX", uint32_t((current_run_mode<<16) | (cycle_buffer.index_length()<<8) | (cycle_buffer.index()))); pos += 8; 
                             snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_tick)); pos += 8; 
 
                             uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(sts), pos);
