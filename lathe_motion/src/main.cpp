@@ -184,19 +184,24 @@ static int32_t index_zero_occured = 0;
 
 static int32_t absolute_pos_start_offset = 0;
 
+static int32_t stepper_target_axis = 0;
+
 static int32_t stepper_actual_pos_z = 0;
+static int32_t stepper_end_pos_z = 0;
 static int32_t stepper_off_z = 0;
 
 static int32_t stepper_follow_mul_z = 0;
 static int32_t stepper_follow_div_z = 0;
 
 static int32_t stepper_actual_pos_x = 0;
+static int32_t stepper_end_pos_x = 0;
 static int32_t stepper_off_x = 0;
 
 static int32_t stepper_follow_mul_x = 0;
 static int32_t stepper_follow_div_x = 0;
 
 static int32_t stepper_actual_pos_d = 0;
+static int32_t stepper_end_pos_d = 0;
 static int32_t stepper_off_d = 0;
 
 static int32_t stepper_follow_mul_d = 0;
@@ -438,6 +443,41 @@ static inline void calc_step(int32_t &stepper_target_pos, int32_t absolute_actua
 	}
 }
 
+static inline void reload_cycle() {
+	const cycle_entry &e = current_cycle[current_cycle_idx];
+	
+	stepper_target_axis = e.target_axs;
+
+	stepper_follow_mul_z = e.stepper_mul_z;
+	stepper_follow_mul_x = e.stepper_mul_x;
+	stepper_follow_mul_d = e.stepper_mul_d;
+
+	stepper_follow_div_z = e.stepper_div_z;
+	stepper_follow_div_x = e.stepper_div_x;
+	stepper_follow_div_d = e.stepper_div_d;
+
+	stepper_end_pos_z = 0;
+	stepper_end_pos_x = 0;
+	stepper_end_pos_d = 0;
+
+	switch(e.target_axs) {
+		case 0: {
+			stepper_end_pos_z = e.target_pos;
+		} break;
+		case 1: {
+			stepper_end_pos_x = e.target_pos;
+		} break;
+		case 2: {
+			stepper_end_pos_d = e.target_pos;
+		} break;
+	}
+
+	if (e.wait_for_index_zero) {
+		wait_for_index_zero = 1;
+		index_zero_occured = 0;
+	}
+}
+
 void TIM2_IRQHandler(void)
 {
     static int32_t stepper_dir_z = 0; // direction is undefined by default
@@ -518,39 +558,37 @@ void TIM2_IRQHandler(void)
 			case    run_mode_cycle_pause:
 			case    run_mode_cycle: {
 
-						const cycle_entry &e = current_cycle[current_cycle_idx];
-			
 						bool do_next_cycle_step = false;
-						switch(e.target_axs) {
+						switch(stepper_target_axis) {
 							case 0: {
-								if (e.stepper_mul_z <= 0) {
-									if (stepper_actual_pos_z >= e.target_pos) {
+								if (stepper_follow_mul_z <= 0) {
+									if (stepper_actual_pos_z >= stepper_end_pos_z) {
 										do_next_cycle_step = true;
 									}   
 								} else {
-									if (stepper_actual_pos_z <= e.target_pos) {
+									if (stepper_actual_pos_z <= stepper_end_pos_z) {
 										do_next_cycle_step = true;
 									}   
 								}
 							} break;
 							case 1: {
-								if (e.stepper_mul_x <= 0) {
-									if (stepper_actual_pos_x >= e.target_pos) {
+								if (stepper_follow_mul_x <= 0) {
+									if (stepper_actual_pos_x >= stepper_end_pos_x) {
 										do_next_cycle_step = true;
 									}
 								} else {
-									if (stepper_actual_pos_x <= e.target_pos) {
+									if (stepper_actual_pos_x <= stepper_end_pos_x) {
 										do_next_cycle_step = true;
 									}
 								}
 							} break;
 							case 2: {
-								if (e.stepper_mul_d <= 0) {
-									if (stepper_actual_pos_d >= e.target_pos) {
+								if (stepper_follow_mul_d <= 0) {
+									if (stepper_actual_pos_d >= stepper_end_pos_d) {
 										do_next_cycle_step = true;
 									}
 								} else {
-									if (stepper_actual_pos_d <= e.target_pos) {
+									if (stepper_actual_pos_d <= stepper_end_pos_d) {
 										do_next_cycle_step = true;
 									}
 								}
@@ -565,12 +603,9 @@ void TIM2_IRQHandler(void)
 							absolute_pos = 0;
 							absolute_pos_start_offset = cnt;
 							current_cycle_idx++;
+							reload_cycle();
 							if (current_cycle_idx == current_cycle_len) {
 								current_run_mode = run_mode_none;
-							}
-							if (current_cycle[current_cycle_idx].wait_for_index_zero) {
-								wait_for_index_zero = 1;
-								index_zero_occured = 0;
 							}
 							__enable_irq();
                             if (current_cycle_idx == current_cycle_len) {
@@ -581,15 +616,13 @@ void TIM2_IRQHandler(void)
 						}
 
 						if (flip_z) {
-							calc_step(stepper_target_pos_z, absolute_actual_pos, e.stepper_mul_z, e.stepper_div_z, stepper_off_z);
+							calc_step(stepper_target_pos_z, absolute_actual_pos, stepper_follow_mul_z, stepper_follow_div_z, stepper_off_z);
 						}
-						
 						if (flip_x) {
-							calc_step(stepper_target_pos_x, absolute_actual_pos, e.stepper_mul_x, e.stepper_div_x, stepper_off_x);
+							calc_step(stepper_target_pos_x, absolute_actual_pos, stepper_follow_mul_x, stepper_follow_div_x, stepper_off_x);
 						}
-						
 						if (flip_d) {
-							calc_step(stepper_target_pos_d, absolute_actual_pos, e.stepper_mul_d, e.stepper_div_d, stepper_off_d);
+							calc_step(stepper_target_pos_d, absolute_actual_pos, stepper_follow_mul_d, stepper_follow_div_d, stepper_off_d);
 						}
 
 					} break;
@@ -986,6 +1019,7 @@ static void parse(void) {
                                     send_invalid_response();
                                     break;
                                 }
+                                reload_cycle();
                                 set_zero_pos();
                                 set_current_run_mode(run_mode_cycle);
                                 send_ok_response();

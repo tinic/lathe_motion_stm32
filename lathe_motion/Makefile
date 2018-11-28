@@ -19,17 +19,17 @@ PROJECT         =  lathe_motion
 ##### Project target
 #####
 
-#ARMCPU		= cortex-m3
-#STM32MCU	= STM32F103xB
-#CMSISDEVINC	= STM32F1xx
-#CMSISSTARTUPS 	= startup_stm32f103xb.s
-#CMSISLINKLD 	= STM32F103XB_FLASH.ld
+ARMCPU		= cortex-m3
+STM32MCU	= STM32F103xB
+CMSISDEVINC	= STM32F1xx
+CMSISSTARTUPS 	= startup_stm32f103xb.s
+CMSISLINKLD 	= STM32F103XB_FLASH.ld
 
-ARMCPU		= cortex-m7
-STM32MCU	= STM32F767xx
-CMSISDEVINC	= STM32F7xx
-CMSISSTARTUPS 	= startup_stm32f767xx.s
-CMSISLINKLD 	= STM32F767XX_FLASH.ld
+#ARMCPU		= cortex-m7
+#STM32MCU	= STM32F767xx
+#CMSISDEVINC	= STM32F7xx
+#CMSISSTARTUPS 	= startup_stm32f767xx.s
+#CMSISLINKLD 	= STM32F767XX_FLASH.ld
 
 ################################################################################
 #####
