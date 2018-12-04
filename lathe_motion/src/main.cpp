@@ -68,6 +68,26 @@
 
 #endif  // #ifdef STM32F767xx
 
+static uint32_t parse_hex08(const uint8_t *buf) {
+	uint32_t value = 0;
+	for (uint32_t c=0; c<8; c++) {
+		if (buf[c] >= 0x30 && buf[c] <= 0x39) {
+			value |= (buf[c] - 0x30       ) << ((7-c)*4);
+		}
+		if (buf[c] >= 0x41 && buf[c] <= 0x46) {
+			value |= (buf[c] - 0x41 + 0x0A) << ((7-c)*4);
+		}
+	}
+	return value;
+}
+
+static void write_hex08(uint8_t *buf, uint32_t value) {
+	static const char *ntoh = "0123456789ABCDEF";
+	for (uint32_t c=0; c<8; c++) {
+		*buf++ = ntoh[(value >> ((7-c)*4)) & 0x0F];
+	}
+}
+
 static uint32_t gcd_impl(uint32_t u, uint32_t v)
 {
     int shift;
@@ -687,7 +707,9 @@ void TIM2_IRQHandler(void)
 							calc_step(stepper_target_pos_d, absolute_actual_pos, stepper_follow_mul_d, stepper_follow_div_d, stepper_off_d);
 						}
 					} break;
-			case    run_mode_cycle_pause:
+			case    run_mode_cycle_pause: {
+						return;
+					} break;
 			case    run_mode_cycle: {
 
 						bool do_next_cycle_step = false;
@@ -1079,7 +1101,8 @@ static void parse(void) {
                             } else {
                                 uint32_t mul = 0;
                                 uint32_t div = 0;
-                                sscanf(&buf[1],"%08x%08x", (unsigned int *)&mul, (unsigned int *)&div);
+								mul = uint32_t(parse_hex08((const uint8_t *)&buf[1]));
+								div = uint32_t(parse_hex08((const uint8_t *)&buf[9]));
                                 if (div <= 0) {
                                     send_invalid_response();
                                     break;
@@ -1137,6 +1160,7 @@ static void parse(void) {
 
                             if (buf[pos] != 'X' && 
                                 buf[pos] != 'Z' &&
+                                buf[pos] != 'C' &&
                                 buf[pos] != 'D' &&
                                 buf[pos] != 'S' && 
                                 buf[pos] != 'R' && 
@@ -1160,8 +1184,18 @@ static void parse(void) {
                                 break;
                             }
 
+                            if (buf[pos] == 'C') {
+                            	if (current_run_mode == run_mode_cycle_pause) {
+	                                set_current_run_mode(run_mode_cycle);
+	                            }
+                                send_ok_response();
+                                break;
+                            }
+
                             if (buf[pos] == 'P') {
-                                set_current_run_mode(run_mode_cycle_pause);
+                            	if (current_run_mode == run_mode_cycle) {
+									set_current_run_mode(run_mode_cycle_pause);
+								}
                                 send_ok_response();
                                 break;
                             }
@@ -1177,7 +1211,6 @@ static void parse(void) {
                                 break;
                             }
 
-
                             if (buf_pos < (1 + 1 + size_of_crc + 64)) {
                                 send_invalid_response();
                                 break;
@@ -1185,16 +1218,15 @@ static void parse(void) {
 
                             cycle_buffer::cycle_entry entry;
                             entry.target_axs = (buf[pos] == 'X') ? 1 : ( (buf[pos] == 'D') ? 2 : 0); pos++;
-							
-                            uint32_t val = 0;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&val); entry.target_pos = val; pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_z); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_z); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_x); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_x); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_mul_d); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&entry.stepper_div_d); pos += 8;
-							sscanf(&buf[pos],"%08x",(unsigned int *)&val); entry.wait_for_index_zero = val; pos += 8;
+
+                            entry.target_pos = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.stepper_mul_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.stepper_div_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.stepper_mul_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.stepper_div_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.stepper_mul_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.stepper_div_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            entry.wait_for_index_zero = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
 
                             entry.stepper_mul_z = -entry.stepper_mul_z;
                             entry.stepper_mul_x = -entry.stepper_mul_x;
@@ -1282,43 +1314,42 @@ static void parse(void) {
                 // Get raw status
                 case 'S': {
                             int16_t cnt = TIM3->CNT;
-
-                            char sts[256];
+                            uint8_t sts[256];
                             size_t pos = 0;
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos + cnt)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_z)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_x)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_actual_pos_d)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(cnt)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_idx)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(current_index_delta)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(absolute_pos + cnt)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(stepper_actual_pos_z)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(stepper_actual_pos_x)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(stepper_actual_pos_d)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(cnt)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(absolute_idx)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(current_index_delta)); pos += 8; 
                             if (current_run_mode == run_mode_cycle) {
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().target_pos)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_mul_z)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_div_z)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_mul_x)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_div_x)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_mul_d)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_buffer.current().stepper_div_d)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().target_pos)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_mul_z)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_div_z)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_mul_x)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_div_x)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_mul_d)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_div_d)); pos += 8; 
                             } else {
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_pos_start_offset)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_z)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_z)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_x)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_x)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_mul_d)); pos += 8; 
-                                snprintf(&sts[pos], 32, "%08lX", uint32_t(stepper_follow_div_d)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(absolute_pos_start_offset)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(stepper_follow_mul_z)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(stepper_follow_div_z)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(stepper_follow_mul_x)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(stepper_follow_div_x)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(stepper_follow_mul_d)); pos += 8; 
+                                write_hex08(&sts[pos], uint32_t(stepper_follow_div_d)); pos += 8; 
                             }
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(cycle_counter)); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t((current_run_mode<<16) | (cycle_buffer.index_length()<<8) | (cycle_buffer.index()))); pos += 8; 
-                            snprintf(&sts[pos], 32, "%08lX", uint32_t(absolute_tick)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(cycle_counter)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t((current_run_mode<<16) | (cycle_buffer.index_length()<<8) | (cycle_buffer.index()))); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(absolute_tick)); pos += 8; 
 
                             uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(sts), pos);
 
-                            sts[pos++] = char(int2hex[((crc>>12)&0xF)]);
-                            sts[pos++] = char(int2hex[((crc>> 8)&0xF)]);
-                            sts[pos++] = char(int2hex[((crc>> 4)&0xF)]);
-                            sts[pos++] = char(int2hex[((crc>> 0)&0xF)]);
+                            sts[pos++] = uint8_t(int2hex[((crc>>12)&0xF)]);
+                            sts[pos++] = uint8_t(int2hex[((crc>> 8)&0xF)]);
+                            sts[pos++] = uint8_t(int2hex[((crc>> 4)&0xF)]);
+                            sts[pos++] = uint8_t(int2hex[((crc>> 0)&0xF)]);
                             sts[pos++] = '\n';
 
                             // Send the ascii-fied data over UART
