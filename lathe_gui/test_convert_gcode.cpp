@@ -834,6 +834,40 @@ inline double mm_to_step_y(double mm) {
 	mm *= motor_steps_per_rev / (25.4 / lead_screw_tpi_y); return mm;
 }
 
+static int32_t current_block = 0;
+static int32_t current_inter = 0;
+static int32_t current_bytes = 0;
+
+static int32_t prev_z_mul = 0;
+static int32_t prev_z_div = 0;
+static int32_t prev_x_mul = 0;
+static int32_t prev_x_div = 0;
+static int32_t prev_d_mul = 0;
+static int32_t prev_d_div = 0;
+
+static uint32_t gcd_impl(uint32_t u, uint32_t v)
+{
+    int shift;
+    if (u == 0) return v;
+    if (v == 0) return u;
+    shift = __builtin_ctz(u | v);
+    u >>= __builtin_ctz(u);
+    do {
+        v >>= __builtin_ctz(v);
+        if (u > v) {
+            uint32_t t = v;
+            v = u;
+            u = t;
+        }
+        v = v - u;
+    } while (v != 0);
+    return u << shift;
+}
+
+static int32_t gcd(int32_t u, int32_t v) {
+    return int32_t(gcd_impl(abs(u),abs(v)));
+}
+
 static void output_intermediate(
 			double target_x_pos,
 			double target_y_pos,
@@ -908,14 +942,74 @@ static void output_intermediate(
   int32_t x_div = int32_t(25.4 * encoder_steps_per_rev * 10.0);
   int32_t d_mul = int32_t(target_feed_y * lead_screw_tpi_y * motor_steps_per_rev * 10.0);
   int32_t d_div = int32_t(25.4 * encoder_steps_per_rev * 10.0);
+
+  int32_t gcd_z = gcd(z_mul, z_div);
+  z_mul /= gcd_z;
+  z_div /= gcd_z;
+
+  int32_t gcd_x = gcd(x_mul, x_div);
+  x_mul /= gcd_x;
+  x_div /= gcd_x;
+
+  int32_t gcd_d = gcd(d_mul, d_div);
+  d_mul /= gcd_d;
+  d_div /= gcd_d;
+  
+  current_bytes += 2;
+ 
+  if (abs(target_pos) >> 25) {
+	  current_bytes += 4;
+  } else if (abs(target_pos)>> 17) {
+	  current_bytes += 3;
+  } else if (abs(target_pos)) {
+	  current_bytes += 2;
+  }
+ 
+  if (prev_z_mul != z_mul || prev_z_div != z_div ) {
+	  if ((abs(z_mul) | abs(z_div)) >> 25) {
+		  current_bytes += 8;
+	  } else if ((abs(z_mul) | abs(z_div)) >> 17) {
+		  current_bytes += 6;
+	  } else if ((abs(z_mul) | abs(z_div))) {
+		  current_bytes += 4;
+	  }
+  }
+  if (prev_x_mul != x_mul || prev_x_div != x_div ) {
+	  if ((abs(x_mul) | abs(x_div)) >> 25) {
+		  current_bytes += 8;
+	  } else if ((abs(x_mul) | abs(x_div)) >> 17) {
+		  current_bytes += 6;
+	  } else if ((abs(x_mul) | abs(x_div))) {
+		  current_bytes += 4;
+	  }
+  }
+  if (prev_d_mul != d_mul || prev_d_div != d_div ) {
+	  if ((abs(d_mul) | abs(d_div)) >> 25) {
+		  current_bytes += 8;
+	  } else if ((abs(d_mul) | abs(d_div)) >> 17) {
+		  current_bytes += 6;
+	  } else if ((abs(d_mul) | abs(d_div))) {
+		  current_bytes += 4;
+	  }
+  }
+  
+  prev_z_mul = z_mul;
+  prev_z_div = z_div;
+  prev_x_mul = x_mul;
+  prev_x_div = x_div;
+  prev_d_mul = d_mul;
+  prev_d_div = d_div;
 			
   char str[256] = { 0 };
-  sprintf(str,"%c"
+  sprintf(str,"%04d %04d %05d %c"
   			  "%08x"
 			  "%08x" "%08x"
 			  "%08x" "%08x"
 			  "%08x" "%08x"
 			  "%08x",
+			  current_block,
+			  current_inter++,
+			  current_bytes,
 			  (axis_mode == 0) ? 'X' : ((axis_mode == 1) ? 'D' : 'Z'),
 			  target_pos,
 			  (z_mul && dz) ? z_mul : 0,
@@ -1037,7 +1131,10 @@ int main() {
   double coord_multiplier = 1.0;
   double feed_multiplier = 1.0;
 
+  current_inter = 0;
+  current_bytes = 0;
   for (int c = 0; c < p.num_blocks(); c++) {
+  	current_block = c;
     const gpr::block &b = p.get_block(c);
     for (int d = 0; d < b.size(); d++) {
       const gpr::chunk &c = b.get_chunk(d);

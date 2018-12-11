@@ -442,6 +442,7 @@ static struct cycle_buffer {
 	void reset() {
 		buf_pos = 0;
 		buf_index = 0;
+		memset(&entry,0,sizeof(entry));
 		next();
 	}
 
@@ -450,6 +451,7 @@ static struct cycle_buffer {
 		buf_len = 0;
 		buf_index = 0;
 		buf_index_length = 0;
+		memset(&entry,0,sizeof(entry));
 	}
 	
 	const cycle_entry &current() const {
@@ -477,126 +479,202 @@ static struct cycle_buffer {
 	}
 	
 	#define TARGET_AXS_MASK 0x03
-	#define WAIT_FOR_ZERO_F 0x04
+	#define WAIT_FOR_ZERO   0x04
 
-	#define Z_MULDIV_MSK 0x18
-	#define Z_MULDIV_32_FLG 0x08
-	#define Z_MULDIV_24_FLG 0x10
-	#define Z_MULDIV_16_FLG 0x18
+	#define Z_MULDIV_CHG    0x08
+	#define X_MULDIV_CHG    0x10
+	#define D_MULDIV_CHG    0x20
 
-	#define X_MULDIV_MSK 0x60
-	#define X_MULDIV_32_FLG 0x20
-	#define X_MULDIV_24_FLG 0x40
-	#define X_MULDIV_16_FLG 0x60
+	#define Z_MULDIV_MSK    0x03
+	#define Z_MULDIV_32_FLG 0x01
+	#define Z_MULDIV_24_FLG 0x02
+	#define Z_MULDIV_16_FLG 0x03
 
-	#define D_MULDIV_MSK 0x80
-	#define D_MULDIV_32_FLG 0x80
+	#define X_MULDIV_MSK    0x0C
+	#define X_MULDIV_32_FLG 0x04
+	#define X_MULDIV_24_FLG 0x08
+	#define X_MULDIV_16_FLG 0x0C
+
+	#define D_MULDIV_MSK    0x30
+	#define D_MULDIV_32_FLG 0x10
+	#define D_MULDIV_24_FLG 0x20
+	#define D_MULDIV_16_FLG 0x30
+
+	#define T_MSK    		0xC0
+	#define T_32_FLG 		0x40
+	#define T_24_FLG 		0x80
+	#define T_16_FLG 		0xC0
 		
 	void next() {
-		uint8_t flags = buf[buf_pos++];
+		uint8_t flags0 = buf[buf_pos++];
+		uint8_t flags1 = buf[buf_pos++];
 		
-		entry.target_axs = flags & TARGET_AXS_MASK;
-		entry.wait_for_index_zero = flags & WAIT_FOR_ZERO_F;
+		entry.target_axs = flags0 & TARGET_AXS_MASK;
+		entry.wait_for_index_zero = flags0 & WAIT_FOR_ZERO;
 
-		entry.target_pos = read_int32();
+		if ((flags1 & T_32_FLG) == T_32_FLG) {
+			entry.target_pos = read_int32();
+		} else if ((flags1 & T_32_FLG) == T_24_FLG) {
+			entry.target_pos = read_int24();
+		} else if ((flags1 & T_32_FLG) == T_16_FLG) {
+			entry.target_pos = read_int16();
+		} else {
+			entry.target_pos = 0;
+		}
 
-		if ((flags & Z_MULDIV_MSK) ==  Z_MULDIV_32_FLG) {
-			entry.stepper_mul_z = read_int32();
-			entry.stepper_div_z = read_int32();
-		} else if ((flags & Z_MULDIV_MSK) ==  Z_MULDIV_24_FLG) {
-			entry.stepper_mul_z = read_int24();
-			entry.stepper_div_z = read_int24();
-		} else if ((flags & Z_MULDIV_MSK) ==  Z_MULDIV_16_FLG) {
-			entry.stepper_mul_z = read_int16();
-			entry.stepper_div_z = read_int16();
-		} else {
-			entry.stepper_mul_z = 0;
-			entry.stepper_div_z = 0;
+		if ((flags0 & Z_MULDIV_CHG) != 0) {
+			if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_32_FLG) {
+				entry.stepper_mul_z = read_int32();
+				entry.stepper_div_z = read_int32();
+			} else if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_24_FLG) {
+				entry.stepper_mul_z = read_int24();
+				entry.stepper_div_z = read_int24();
+			} else if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_16_FLG) {
+				entry.stepper_mul_z = read_int16();
+				entry.stepper_div_z = read_int16();
+			} else {
+				entry.stepper_mul_z = 0;
+				entry.stepper_div_z = 0;
+			}
 		}
-		if ((flags & X_MULDIV_MSK) ==  X_MULDIV_32_FLG) {
-			entry.stepper_mul_x = read_int32();
-			entry.stepper_div_x = read_int32();
-		} else if ((flags & X_MULDIV_MSK) ==  X_MULDIV_24_FLG) {
-			entry.stepper_mul_x = read_int24();
-			entry.stepper_div_x = read_int24();
-		} else if ((flags & X_MULDIV_MSK) ==  X_MULDIV_16_FLG) {
-			entry.stepper_mul_x = read_int16();
-			entry.stepper_div_x = read_int16();
-		} else {
-			entry.stepper_mul_x = 0;
-			entry.stepper_div_x = 0;
+
+		if ((flags0 & X_MULDIV_CHG) != 0) {
+			if ((flags1 & X_MULDIV_MSK) == X_MULDIV_32_FLG) {
+				entry.stepper_mul_x = read_int32();
+				entry.stepper_div_x = read_int32();
+			} else if ((flags1 & X_MULDIV_MSK) == X_MULDIV_24_FLG) {
+				entry.stepper_mul_x = read_int24();
+				entry.stepper_div_x = read_int24();
+			} else if ((flags1 & X_MULDIV_MSK) == X_MULDIV_16_FLG) {
+				entry.stepper_mul_x = read_int16();
+				entry.stepper_div_x = read_int16();
+			} else {
+				entry.stepper_mul_x = 0;
+				entry.stepper_div_x = 0;
+			}
 		}
-		if ((flags & D_MULDIV_MSK) ==  D_MULDIV_32_FLG) {
-			entry.stepper_mul_d = read_int32();
-			entry.stepper_div_d = read_int32();
-		} else {
-			entry.stepper_mul_d = 0;
-			entry.stepper_div_d = 0;
+
+		if ((flags0 & D_MULDIV_CHG) != 0) {
+			if ((flags1 & D_MULDIV_MSK) == D_MULDIV_32_FLG) {
+				entry.stepper_mul_d = read_int32();
+				entry.stepper_div_d = read_int32();
+			} else if ((flags1 & D_MULDIV_MSK) == D_MULDIV_24_FLG) {
+				entry.stepper_mul_d = read_int24();
+				entry.stepper_div_d = read_int24();
+			} else if ((flags1 & D_MULDIV_MSK) == D_MULDIV_16_FLG) {
+				entry.stepper_mul_d = read_int16();
+				entry.stepper_div_d = read_int16();
+			} else {
+				entry.stepper_mul_d = 0;
+				entry.stepper_div_d = 0;
+			}
 		}
 		
 		buf_index ++;
 	}
 
-	void push(const cycle_entry &entry) {
-		uint8_t flags = entry.target_axs;
+	void push(const cycle_entry &push_entry) {
+		uint8_t flags0 = push_entry.target_axs;
+		uint8_t flags1 = 0;
 
-		if (entry.stepper_mul_z || entry.stepper_div_z) {
-			if ((abs(entry.stepper_mul_z) | abs(entry.stepper_div_z)) >> 24 != 0) {
-				flags |= Z_MULDIV_32_FLG;
-			} else if ((abs(entry.stepper_mul_z) | abs(entry.stepper_div_z)) >> 16 != 0) {
-				flags |= Z_MULDIV_24_FLG;
-			} else {
-				flags |= Z_MULDIV_16_FLG;
-			}
-		}
-		if (entry.stepper_mul_x || entry.stepper_div_x) {
-			if ((abs(entry.stepper_mul_x) | abs(entry.stepper_div_x)) >> 24 != 0) {
-				flags |= X_MULDIV_32_FLG;
-			} else if ((abs(entry.stepper_mul_x) | abs(entry.stepper_div_x)) >> 16 != 0) {
-				flags |= X_MULDIV_24_FLG;
-			} else {
-				flags |= X_MULDIV_16_FLG;
-			}
-		}
-		
-		if (entry.stepper_mul_d || entry.stepper_div_d) {
-			flags |= D_MULDIV_32_FLG;
+		// always changes, so do not optimize change
+		if ((abs(push_entry.target_pos) >> 25) != 0) {
+			flags1 |= T_32_FLG;
+		} else if ((abs(push_entry.target_pos) >> 17) != 0) {
+			flags1 |= T_24_FLG;
+		} else {
+			flags1 |= T_16_FLG;
 		}
 
-		flags |= entry.wait_for_index_zero ? WAIT_FOR_ZERO_F : 0;
+		if (push_entry.stepper_mul_z != entry.stepper_mul_z ||
+			push_entry.stepper_div_z != entry.stepper_div_z ) {
+			flags0 |= Z_MULDIV_CHG;
+			if (push_entry.stepper_mul_z || push_entry.stepper_div_z) {
+				if (((abs(push_entry.stepper_mul_z) | abs(push_entry.stepper_div_z)) >> 25) != 0) {
+					flags1 |= Z_MULDIV_32_FLG;
+				} else if (((abs(push_entry.stepper_mul_z) | abs(push_entry.stepper_div_z)) >> 17) != 0) {
+					flags1 |= Z_MULDIV_24_FLG;
+				} else {
+					flags1 |= Z_MULDIV_16_FLG;
+				}
+			}
+		}
+
+		if (push_entry.stepper_mul_x != entry.stepper_mul_x ||
+			push_entry.stepper_div_x != entry.stepper_div_x ) {
+			flags0 |= X_MULDIV_CHG;
+			if (push_entry.stepper_mul_x || push_entry.stepper_div_x) {
+				if (((abs(push_entry.stepper_mul_x) | abs(push_entry.stepper_div_x)) >> 25) != 0) {
+					flags1 |= X_MULDIV_32_FLG;
+				} else if (((abs(push_entry.stepper_mul_x) | abs(push_entry.stepper_div_x)) >> 17) != 0) {
+					flags1 |= X_MULDIV_24_FLG;
+				} else {
+					flags1 |= X_MULDIV_16_FLG;
+				}
+			}
+		}
 		
-		buf[buf_len++] = flags;
+		if (push_entry.stepper_mul_d != entry.stepper_mul_d ||
+			push_entry.stepper_div_d != entry.stepper_div_d ) {
+			flags0 |= D_MULDIV_CHG;
+			if (push_entry.stepper_mul_d || push_entry.stepper_div_d) {
+				if (((abs(push_entry.stepper_mul_d) | abs(push_entry.stepper_div_d)) >> 25) != 0) {
+					flags1 |= X_MULDIV_32_FLG;
+				} else if (((abs(push_entry.stepper_mul_d) | abs(push_entry.stepper_div_d)) >> 17) != 0) {
+					flags1 |= X_MULDIV_24_FLG;
+				} else {
+					flags1 |= X_MULDIV_16_FLG;
+				}
+			}
+		}
+
+		flags0 |= push_entry.wait_for_index_zero ? WAIT_FOR_ZERO : 0;
 		
-		write_int32(entry.target_pos);
+		buf[buf_len++] = flags0;
+		buf[buf_len++] = flags1;
+
+		if ((flags1 & T_MSK) == T_32_FLG) {
+			write_int32(push_entry.target_pos);
+		} else if ((flags1 & T_MSK) == T_24_FLG) {
+			write_int24(push_entry.target_pos);
+		} else if ((flags1 & T_MSK) == T_16_FLG) {
+			write_int16(push_entry.target_pos);
+		}
 		
-		if (flags & Z_MULDIV_32_FLG) {
-			write_int32(entry.stepper_mul_z);
-			write_int32(entry.stepper_div_z);
-		}
-		if (flags & Z_MULDIV_24_FLG) {
-			write_int24(entry.stepper_mul_z);
-			write_int24(entry.stepper_div_z);
-		}
-		if (flags & Z_MULDIV_16_FLG) {
-			write_int16(entry.stepper_mul_z);
-			write_int16(entry.stepper_div_z);
-		}
-		if (flags & X_MULDIV_32_FLG) {
-			write_int32(entry.stepper_mul_x);
-			write_int32(entry.stepper_div_x);
-		}
-		if (flags & X_MULDIV_24_FLG) {
-			write_int24(entry.stepper_mul_x);
-			write_int24(entry.stepper_div_x);
-		}
-		if (flags & X_MULDIV_16_FLG) {
-			write_int16(entry.stepper_mul_x);
-			write_int16(entry.stepper_div_x);
-		}
-		if (flags & D_MULDIV_32_FLG) {
-			write_int32(entry.stepper_mul_d);
-			write_int32(entry.stepper_div_d);
-		}
+		if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_32_FLG) {
+			write_int32(push_entry.stepper_mul_z);
+			write_int32(push_entry.stepper_div_z);
+		} else if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_24_FLG) {
+			write_int24(push_entry.stepper_mul_z);
+			write_int24(push_entry.stepper_div_z);
+		} else if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_16_FLG) {
+			write_int16(push_entry.stepper_mul_z);
+			write_int16(push_entry.stepper_div_z);
+		} 
+		
+		if ((flags1 & X_MULDIV_MSK) == X_MULDIV_32_FLG) {
+			write_int32(push_entry.stepper_mul_x);
+			write_int32(push_entry.stepper_div_x);
+		} else if ((flags1 & X_MULDIV_MSK) == X_MULDIV_24_FLG) {
+			write_int24(push_entry.stepper_mul_x);
+			write_int24(push_entry.stepper_div_x);
+		} else if ((flags1 & X_MULDIV_MSK) == X_MULDIV_16_FLG) {
+			write_int16(push_entry.stepper_mul_x);
+			write_int16(push_entry.stepper_div_x);
+		} 
+		
+		if ((flags1 & D_MULDIV_MSK) == D_MULDIV_32_FLG) {
+			write_int32(push_entry.stepper_mul_d);
+			write_int32(push_entry.stepper_div_d);
+		} else if ((flags1 & D_MULDIV_MSK) == D_MULDIV_24_FLG) {
+			write_int24(push_entry.stepper_mul_d);
+			write_int24(push_entry.stepper_div_d);
+		} else if ((flags1 & D_MULDIV_MSK) == D_MULDIV_16_FLG) {
+			write_int16(push_entry.stepper_mul_d);
+			write_int16(push_entry.stepper_div_d);
+		} 
+		
+		entry = push_entry;
 		
 		buf_index_length++;
 	}
