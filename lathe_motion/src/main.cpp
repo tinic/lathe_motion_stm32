@@ -12,9 +12,6 @@
 #include "stm32f7xx.h"
 #endif  // #ifdef STM32F767xx
 
-#include "globals.h"
-#include "main.h"
-
 // led
 #define LED_DELAY_MS        128
 
@@ -479,29 +476,57 @@ static struct cycle_buffer {
 		return buf_len >= (sizeof(buf) - sizeof(entry));
 	}
 	
+	#define TARGET_AXS_MASK 0x03
+	#define WAIT_FOR_ZERO_F 0x04
+
+	#define Z_MULDIV_MSK 0x18
+	#define Z_MULDIV_32_FLG 0x08
+	#define Z_MULDIV_24_FLG 0x10
+	#define Z_MULDIV_16_FLG 0x18
+
+	#define X_MULDIV_MSK 0x60
+	#define X_MULDIV_32_FLG 0x20
+	#define X_MULDIV_24_FLG 0x40
+	#define X_MULDIV_16_FLG 0x60
+
+	#define D_MULDIV_MSK 0x80
+	#define D_MULDIV_32_FLG 0x80
+		
 	void next() {
 		uint8_t flags = buf[buf_pos++];
 		
-		entry.target_axs = flags & 0x03;
-		entry.wait_for_index_zero = flags & 0x20;
+		entry.target_axs = flags & TARGET_AXS_MASK;
+		entry.wait_for_index_zero = flags & WAIT_FOR_ZERO_F;
 
 		entry.target_pos = read_int32();
 
-		if (flags & 0x04) {
+		if ((flags & Z_MULDIV_MSK) ==  Z_MULDIV_32_FLG) {
 			entry.stepper_mul_z = read_int32();
 			entry.stepper_div_z = read_int32();
+		} else if ((flags & Z_MULDIV_MSK) ==  Z_MULDIV_24_FLG) {
+			entry.stepper_mul_z = read_int24();
+			entry.stepper_div_z = read_int24();
+		} else if ((flags & Z_MULDIV_MSK) ==  Z_MULDIV_16_FLG) {
+			entry.stepper_mul_z = read_int16();
+			entry.stepper_div_z = read_int16();
 		} else {
 			entry.stepper_mul_z = 0;
 			entry.stepper_div_z = 0;
 		}
-		if (flags & 0x08) {
+		if ((flags & X_MULDIV_MSK) ==  X_MULDIV_32_FLG) {
 			entry.stepper_mul_x = read_int32();
 			entry.stepper_div_x = read_int32();
+		} else if ((flags & X_MULDIV_MSK) ==  X_MULDIV_24_FLG) {
+			entry.stepper_mul_x = read_int24();
+			entry.stepper_div_x = read_int24();
+		} else if ((flags & X_MULDIV_MSK) ==  X_MULDIV_16_FLG) {
+			entry.stepper_mul_x = read_int16();
+			entry.stepper_div_x = read_int16();
 		} else {
 			entry.stepper_mul_x = 0;
 			entry.stepper_div_x = 0;
 		}
-		if (flags & 0x10) {
+		if ((flags & D_MULDIV_MSK) ==  D_MULDIV_32_FLG) {
 			entry.stepper_mul_d = read_int32();
 			entry.stepper_div_d = read_int32();
 		} else {
@@ -516,32 +541,59 @@ static struct cycle_buffer {
 		uint8_t flags = entry.target_axs;
 
 		if (entry.stepper_mul_z || entry.stepper_div_z) {
-			flags |= 0x04;
+			if ((abs(entry.stepper_mul_z) | abs(entry.stepper_div_z)) >> 24 != 0) {
+				flags |= Z_MULDIV_32_FLG;
+			} else if ((abs(entry.stepper_mul_z) | abs(entry.stepper_div_z)) >> 16 != 0) {
+				flags |= Z_MULDIV_24_FLG;
+			} else {
+				flags |= Z_MULDIV_16_FLG;
+			}
 		}
 		if (entry.stepper_mul_x || entry.stepper_div_x) {
-			flags |= 0x08;
+			if ((abs(entry.stepper_mul_x) | abs(entry.stepper_div_x)) >> 24 != 0) {
+				flags |= X_MULDIV_32_FLG;
+			} else if ((abs(entry.stepper_mul_x) | abs(entry.stepper_div_x)) >> 16 != 0) {
+				flags |= X_MULDIV_24_FLG;
+			} else {
+				flags |= X_MULDIV_16_FLG;
+			}
 		}
+		
 		if (entry.stepper_mul_d || entry.stepper_div_d) {
-			flags |= 0x10;
+			flags |= D_MULDIV_32_FLG;
 		}
 
-		flags |= entry.wait_for_index_zero ? 0x20 : 0;
+		flags |= entry.wait_for_index_zero ? WAIT_FOR_ZERO_F : 0;
 		
 		buf[buf_len++] = flags;
 		
 		write_int32(entry.target_pos);
 		
-		if (entry.stepper_mul_z || entry.stepper_div_z) {
+		if (flags & Z_MULDIV_32_FLG) {
 			write_int32(entry.stepper_mul_z);
 			write_int32(entry.stepper_div_z);
 		}
-
-		if (entry.stepper_mul_x || entry.stepper_div_x) {
+		if (flags & Z_MULDIV_24_FLG) {
+			write_int24(entry.stepper_mul_z);
+			write_int24(entry.stepper_div_z);
+		}
+		if (flags & Z_MULDIV_16_FLG) {
+			write_int16(entry.stepper_mul_z);
+			write_int16(entry.stepper_div_z);
+		}
+		if (flags & X_MULDIV_32_FLG) {
 			write_int32(entry.stepper_mul_x);
 			write_int32(entry.stepper_div_x);
 		}
-
-		if (entry.stepper_mul_d || entry.stepper_div_d) {
+		if (flags & X_MULDIV_24_FLG) {
+			write_int24(entry.stepper_mul_x);
+			write_int24(entry.stepper_div_x);
+		}
+		if (flags & X_MULDIV_16_FLG) {
+			write_int16(entry.stepper_mul_x);
+			write_int16(entry.stepper_div_x);
+		}
+		if (flags & D_MULDIV_32_FLG) {
 			write_int32(entry.stepper_mul_d);
 			write_int32(entry.stepper_div_d);
 		}
@@ -559,10 +611,36 @@ private:
 		buf_pos += 4;
 		return res;
 	}
+
+	int32_t read_int24() {
+		int32_t res = int32_t((int32_t(int8_t(buf[buf_pos+0])) << 16) | 
+							  (               buf[buf_pos+1]   <<  8) | 
+							  (               buf[buf_pos+2]   <<  0)); 
+		buf_pos += 3;
+		return res;
+	}
+
+	int32_t read_int16() {
+		int32_t res = int32_t(int16_t((buf[buf_pos+0] <<  8) | 
+							          (buf[buf_pos+1] <<  0))); 
+		buf_pos += 2;
+		return res;
+	}
 	
 	void write_int32(int32_t val) {
 		buf[buf_len++] = (uint32_t(val) >> 24) & 0xFF;
 		buf[buf_len++] = (uint32_t(val) >> 16) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >>  8) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >>  0) & 0xFF;
+	}
+
+	void write_int24(int32_t val) {
+		buf[buf_len++] = (uint32_t(val) >> 16) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >>  8) & 0xFF;
+		buf[buf_len++] = (uint32_t(val) >>  0) & 0xFF;
+	}
+
+	void write_int16(int16_t val) {
 		buf[buf_len++] = (uint32_t(val) >>  8) & 0xFF;
 		buf[buf_len++] = (uint32_t(val) >>  0) & 0xFF;
 	}
@@ -1403,14 +1481,20 @@ static void init_systick(void)
 static void init_clock(void)
 {
 #ifdef STM32F103xB
-    // Conf clock : 72MHz using HSE 8MHz crystal w/ PLL X 9 (8MHz x 9 = 72MHz)
+    // Conf clock : 72MHz or 128Mhz using HSE 8MHz crystal w/ PLL X 9/16 (8MHz x 9 = 72MHz, 8MHz x 16 = 128MHz)
     FLASH->ACR      |= FLASH_ACR_LATENCY_2; // Two wait states, per datasheet
     RCC->CFGR       |= RCC_CFGR_PPRE1_2;    // prescale AHB1 = HCLK/2
     RCC->CR         |= RCC_CR_HSEON;        // enable HSE clock
     while( !(RCC->CR & RCC_CR_HSERDY) );    // wait for the HSEREADY flag
     
     RCC->CFGR       |= RCC_CFGR_PLLSRC;     // set PLL source to HSE
+
+#if 1 // 128Mhz
+    RCC->CFGR       |= RCC_CFGR_PLLMULL16;   // multiply by 9
+#else  // #if 1 // 128Mhz
     RCC->CFGR       |= RCC_CFGR_PLLMULL9;   // multiply by 9
+#endif  // #if 1 // 128Mhz
+
     RCC->CR         |= RCC_CR_PLLON;        // enable the PLL
     while( !(RCC->CR & RCC_CR_PLLRDY) );    // wait for the PLLRDY flag
     
