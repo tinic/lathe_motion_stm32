@@ -4,6 +4,10 @@
 #include <string.h>
 #include <stdio.h>
 
+//#define STM32
+
+#ifdef STM32
+
 #ifdef STM32F103xB
 #include "stm32f1xx.h"
 #endif  // #ifdef STM32F103xB
@@ -64,6 +68,57 @@
 #define PIN_DIR_0_X GPIOE->BSRR = GPIO_BSRR_BR_14
 
 #endif  // #ifdef STM32F767xx
+
+static int16_t qep_counter() {
+	return TIM3->CNT;
+}
+
+static void set_qep_counter(int16_t value) {
+	TIM3->CNT = value;
+}
+
+#else  // #ifdef STM32
+
+#include <cstdlib>
+#include <deque>
+#include <iostream>
+#include <chrono>
+#include <thread>
+#include <boost/asio.hpp>
+#include <boost/bind.hpp>
+
+#define PIN_ENA_1_Z
+#define PIN_ENA_0_Z
+
+#define PIN_PUL_1_Z
+#define PIN_PUL_0_Z
+
+#define PIN_DIR_1_Z
+#define PIN_DIR_0_Z
+
+#define PIN_ENA_1_X
+#define PIN_ENA_0_X
+
+#define PIN_PUL_1_X
+#define PIN_PUL_0_X
+
+#define PIN_DIR_1_X
+#define PIN_DIR_0_X
+
+static void __disable_irq() { }
+static void __enable_irq() { }
+
+static int16_t qep_counter_int16 = 0;
+
+static int16_t qep_counter() {
+	return qep_counter_int16;
+}
+
+static void set_qep_counter(int16_t value) {
+	qep_counter_int16 = value;
+}
+
+#endif  // #ifdef STM32
 
 static uint32_t parse_hex08(const uint8_t *buf) {
 	uint32_t value = 0;
@@ -297,6 +352,8 @@ static uint16_t CRC16(const uint8_t *data, size_t len)
 
 static void put_char(uint8_t byte)
 {
+#ifdef STM32
+
 #ifdef STM32F103xB
     USART1->DR = (int)(byte);
     while (!(USART1->SR & USART_SR_TXE));
@@ -306,6 +363,12 @@ static void put_char(uint8_t byte)
     USART1->RDR = (int)(byte);
     while (!(USART1->ISR & USART_ISR_TXE));
 #endif  // #ifdef STM32F767xx
+
+#else  // #ifdef STM32
+
+
+
+#endif  // #ifdef STM32
 }
 
 typedef struct {
@@ -357,16 +420,20 @@ extern "C" {
 
 void HardFault_Handler(void)
 {
+#ifdef STM32
     for (;;) {
         LED_PORT->BSRR  = LED_RESET;
     }
+#endif  // #ifdef STM32
 }
 
 void BusFault_Handler(void)
 {
+#ifdef STM32
     for (;;) {
         LED_PORT->BSRR  = LED_RESET;
     }
+#endif  // #ifdef STM32
 }
 
 void SysTick_Handler(void)
@@ -375,6 +442,7 @@ void SysTick_Handler(void)
     
     parse();
 
+#ifdef STM32
     led_delay_count = ( (led_delay_count + 1) % LED_DELAY_MS );
     if(led_delay_count == 0) {
         led_state       = led_state_next;
@@ -382,10 +450,13 @@ void SysTick_Handler(void)
     }
     
     IWDG->KR  = 0xAAAA;
+#endif  // #ifdef STM32
 }
 
 void USART1_IRQHandler(void)
 {
+#ifdef STM32
+
 #ifdef STM32F103xB
     uint8_t in_char = (USART1->DR & 0xFF);
     buffer_char(in_char);
@@ -395,14 +466,17 @@ void USART1_IRQHandler(void)
     uint8_t in_char = (USART1->RDR & 0xFF);
     buffer_char(in_char);
 #endif  // #ifdef STM32F767xx
+
+#endif  // #ifdef STM32
 }
 
 void EXTI1_IRQHandler(void)
 {
     // Core critical section, nothing shall happen here
     __disable_irq();
-    int16_t cnt = TIM3->CNT;
-    TIM3->CNT = 0;
+
+    int16_t cnt = qep_counter();
+    set_qep_counter(0);
 
     absolute_pos += cnt;
 
@@ -412,7 +486,9 @@ void EXTI1_IRQHandler(void)
         absolute_idx++;
     }
 
+#ifdef STM32
     EXTI->PR |= EXTI_PR_PR1;
+#endif  // #ifdef STM32
 
     if (cnt == 2880 || cnt == -2880) {
         index_zero_occured = 1;
@@ -725,6 +801,8 @@ private:
 
 	cycle_entry entry;
 
+#ifdef STM32
+
 #ifdef STM32F103xB
 	uint8_t buf[16384];
 #endif  // #ifdef STM32F103xB
@@ -732,6 +810,10 @@ private:
 #ifdef STM32F767xx
 	uint8_t buf[262144];
 #endif  // #ifdef STM32F767xx
+
+#else  // #ifdef STM32
+	uint8_t buf[16384];
+#endif   // #ifdef STM32
 
 	uint32_t buf_index;
 	uint32_t buf_index_length;
@@ -792,10 +874,12 @@ void TIM2_IRQHandler(void)
     static int32_t stepper_dir_x = 0; // direction is undefined by default
     static int32_t stepper_dir_d = 0; // direction is undefined by default
 
+#ifdef STM32
     if ((TIM2->SR & TIM_SR_UIF)) {
         TIM2->SR &= ~(TIM_SR_UIF);
 
         *DWT_CYCCNT = 0;
+#endif  // #ifdef STM32
 
         // Do nothing if we are in stop sync mode
         if (current_run_mode == run_mode_none ||
@@ -805,7 +889,7 @@ void TIM2_IRQHandler(void)
         
         // Protect against TIM3 IRQ race
         __disable_irq();
-        int16_t cnt = TIM3->CNT;
+        int16_t cnt = qep_counter();
         int32_t absolute_actual_pos = absolute_pos;
 
         absolute_actual_pos += cnt - absolute_pos_start_offset;
@@ -1019,15 +1103,19 @@ void TIM2_IRQHandler(void)
             flip_d ^= 1;
         }
         
+#ifdef STM32
         cycle_counter = *DWT_CYCCNT;
     }
+#endif  // #ifdef STM32
 }
 
 void TIM3_IRQHandler(void)
 {
+#ifdef STM32
     if ((TIM3->SR & TIM_SR_UIF)) {
         TIM3->SR &= ~(TIM_SR_UIF);
     }
+#endif  // #ifdef STM32
 }
 
 #ifdef __cplusplus
@@ -1118,7 +1206,8 @@ static void set_current_run_mode(run_mode mode)
 {
     if (mode != current_run_mode) {
         __disable_irq();
-        int16_t cnt = TIM3->CNT;
+
+        int16_t cnt = qep_counter();
 
         stepper_off_z = stepper_actual_pos_z;
         stepper_off_x = stepper_actual_pos_x;
@@ -1134,10 +1223,14 @@ static void set_current_run_mode(run_mode mode)
         case    run_mode_follow_z:
         case    run_mode_follow_x:
         case    run_mode_follow_d: {
+#ifdef STM32
                     TIM2->ARR = one_active_axis_timer;
+#endif  // #ifdef STM32
                 } break;
         default: {
+#ifdef STM32
                     TIM2->ARR = all_active_axis_timer;
+#endif  // #ifdef STM32
                 } break;
     }
     maybe_enable_steppers();
@@ -1151,7 +1244,7 @@ static void set_follow_values(int32_t axis, int32_t mul, int32_t div)
 
     __disable_irq();
 
-    int16_t cnt = TIM3->CNT;
+	int16_t cnt = qep_counter();
 
     int32_t gcd_v = gcd(mul, div);
     mul /= gcd_v;
@@ -1469,7 +1562,7 @@ static void parse(void) {
 
                 // Get raw status
                 case 'S': {
-                            int16_t cnt = TIM3->CNT;
+							int16_t cnt = qep_counter();
                             uint8_t sts[256];
                             size_t pos = 0;
                             write_hex08(&sts[pos], uint32_t(absolute_pos + cnt)); pos += 8; 
@@ -1550,14 +1643,44 @@ static void init_constants()
     stepper_follow_div_d = 1;
 }
 
+#ifndef STM32
+class systick_timer {
+
+public:
+	systick_timer() {
+		thread = std::thread([]() {
+			while(1) {
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				SysTick_Handler();
+			}
+	 	});
+	}
+
+private:
+	std::thread thread;
+};
+
+#endif  // #ifndef STM32
+
 static void init_systick(void)
 {
+#ifdef STM32
+
     int tick_time = SystemCoreClock / 1000;  // Generate interrupt each 1 ms
     SysTick_Config(tick_time);               // Configure systick timer
+
+#else  // #ifdef STM32
+
+	static std::shared_ptr<systick_timer> systick_session;
+    systick_session = std::make_shared<systick_timer>();
+
+#endif  // #ifdef STM32
 }
 
 static void init_clock(void)
 {
+#ifdef STM32
+
 #ifdef STM32F103xB
     // Conf clock : 72MHz or 128Mhz using HSE 8MHz crystal w/ PLL X 9/16 (8MHz x 9 = 72MHz, 8MHz x 16 = 128MHz)
     FLASH->ACR      |= FLASH_ACR_LATENCY_2; // Two wait states, per datasheet
@@ -1610,10 +1733,14 @@ static void init_clock(void)
 
     SystemCoreClockUpdate();                // calculate the SYSCLOCK value
 #endif  // #ifdef STM32F767xx
+#else  // #ifdef STM32
+
+#endif  // #ifdef STM32
 }
 
 static void init_led(void)
 {
+#ifdef STM32
 #ifdef STM32F103xB
     RCC->APB2ENR |= RCC_APB2ENR_IOPCEN; // enable GPIO clock for LED
     LED_PORT->CRH    &= ~(GPIO_CRH_MODE13 | GPIO_CRH_CNF13);  // reset pin MODE / CNF
@@ -1623,10 +1750,43 @@ static void init_led(void)
 #ifdef STM32F767xx
     RCC->APB1ENR |= RCC_AHB1ENR_GPIOAEN; // enable GPIO clock for LED
 #endif  // #ifdef STM32F767xx
+#endif  // #ifdef STM32
 }
+
+#ifndef STM32
+class uart_listener {
+public:
+	uart_listener() :
+		socket(service) ,
+		acceptor(service, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::loopback(), 33333)) {
+		acceptor.async_accept(socket, boost::bind(&uart_listener::handle_accept, this, boost::asio::placeholders::error));
+		thread = std::thread([this]() { service.run(); });
+	}
+	void handle_accept(const boost::system::error_code& err) {
+		uint8_t buf[256] = { 0 };
+		while (1) {
+			try {
+				size_t len = socket.read_some(boost::asio::buffer(buf, sizeof(buf)));
+				for (int32_t c = 0; c < len; c++) {
+					buffer_char(buf[c]);
+				}
+			}
+			catch(...) {
+				return;
+			}
+		}
+	}
+private:
+	boost::asio::io_service service;
+	std::thread thread;
+	boost::asio::ip::tcp::socket socket;
+	boost::asio::ip::tcp::acceptor acceptor;
+};
+#endif  // #ifndef STM32
 
 static void init_usart(uint32_t baudrate)
 {
+#ifdef STM32
     RCC->APB2ENR |= RCC_APB2ENR_USART1EN; // enable USART1 clock
 
 #ifdef STM32F103xB
@@ -1673,10 +1833,17 @@ static void init_usart(uint32_t baudrate)
     // configure NVIC
     NVIC_EnableIRQ(USART1_IRQn);
     NVIC_SetPriority(USART1_IRQn, 255);
+#else  // #ifdef STM32
+
+	static std::shared_ptr<uart_listener> uart_session;
+    uart_session = std::make_shared<uart_listener>();
+
+#endif  // #ifdef STM32
 }
 
 static void init_qenc()
 {
+#ifdef STM32
     // setup A/B quadrature on timer 3 periph
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;  // enable TIM3 clock
 
@@ -1750,11 +1917,12 @@ static void init_qenc()
     // configure NVIC
     NVIC_EnableIRQ(EXTI1_IRQn);
     NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
-    
+#endif  // #ifdef STM32
 }
 
 static void init_stepper_pins()
 {
+#ifdef STM32
 #ifdef STM32F103xB
     RCC->APB2ENR |= RCC_APB2ENR_IOPBEN | RCC_APB2ENR_IOPAEN; // Enable GPIOB and GPIOA block
 
@@ -1834,10 +2002,12 @@ static void init_stepper_pins()
     GPIOE->OSPEEDR |= GPIO_OSPEEDER_OSPEEDR14_1; // high speed 
     PIN_DIR_1_X;
 #endif   // #ifdef STM32F767xx
+#endif  // #ifdef STM32
 }
 
 static void init_stepper_sync_timer()
 {
+#ifdef STM32
     RCC->APB1ENR |= RCC_APB1ENR_TIM2EN;  // enable TIM2 clock
 
     TIM2->CR1 |= TIM_CR1_ARPE | TIM_CR1_URS;
@@ -1849,9 +2019,11 @@ static void init_stepper_sync_timer()
 
     NVIC_EnableIRQ(TIM2_IRQn);
     NVIC_SetPriority(TIM2_IRQn, 1); // second highest priority in system
+#endif  // #ifdef STM32
 }
 
 void init_cycle_counter() {
+#ifdef STM32
     volatile uint32_t *DEMCR = (uint32_t *)0xE000EDFC;
     volatile uint32_t *DWT_LAR = (uint32_t *)0xE0001FB0;
     volatile uint32_t *DWT_CONTROL = (uint32_t *)0xE0001000;
@@ -1859,10 +2031,12 @@ void init_cycle_counter() {
     *DEMCR |= 0x01000000;
     *DWT_LAR = 0xC5ACCE55; 
     *DWT_CONTROL |= 1;
+#endif  // #ifdef STM32
 }
 
 static void init_watchdog(void)
 {
+#ifdef STM32
     // enable watchdog
     IWDG->KR  = 0xCCCC;
     IWDG->KR  = 0x5555;
@@ -1870,6 +2044,7 @@ static void init_watchdog(void)
     // 1s watchdog
     IWDG->PR  = 1; // 32kHz / 8
     IWDG->RLR = 0xFFF; // *4095 = 1.02375s
+#endif  // #ifdef STM32
 }
 
 static void init_hardware(void)
@@ -1891,6 +2066,7 @@ int main(void)
     init_hardware();
     set_current_run_mode(run_mode_follow_z);
     while (1) {
+#ifdef STM32
         switch(led_state)
         {
             case led_on:
@@ -1909,6 +2085,11 @@ int main(void)
                 break;
         }
         __WFI();
+#else  // #ifdef STM32
+
+		std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+
+#endif  // #ifdef STM32
     }
     return 0;
 }
