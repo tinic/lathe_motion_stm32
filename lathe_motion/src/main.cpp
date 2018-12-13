@@ -1841,6 +1841,32 @@ static void init_usart(uint32_t baudrate)
 #endif  // #ifdef STM32
 }
 
+#ifndef STM32
+class qenc_timer {
+
+public:
+	qenc_timer() {
+		thread = std::thread([]() {
+			const int32_t pulses_per_rev = 2880;
+			const int32_t rpm = 500;
+			const int32_t usecs = int32_t(1000000./((double(rpm)/60.0)*double(pulses_per_rev)));
+			while(1) {
+				std::this_thread::sleep_for(std::chrono::microseconds(usecs));
+				qep_counter_int16 ++;
+				if (qep_counter_int16 == pulses_per_rev) {
+					TIM2_IRQHandler();
+					qep_counter_int16 = 0;
+				}
+			}
+	 	});
+	}
+
+private:
+	std::thread thread;
+};
+
+#endif  // #ifndef STM32
+
 static void init_qenc()
 {
 #ifdef STM32
@@ -1917,6 +1943,12 @@ static void init_qenc()
     // configure NVIC
     NVIC_EnableIRQ(EXTI1_IRQn);
     NVIC_SetPriority(EXTI1_IRQn, 0); // highest/critical priority in system
+
+#else  // #ifdef STM32
+
+	static std::shared_ptr<qenc_timer> qenc_session;
+    qenc_session = std::make_shared<qenc_timer>();
+
 #endif  // #ifdef STM32
 }
 
