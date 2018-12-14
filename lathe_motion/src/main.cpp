@@ -84,6 +84,8 @@ static void set_qep_counter(int16_t value) {
 #include <iostream>
 #include <chrono>
 #include <thread>
+#include <mutex>
+
 #include <boost/asio.hpp>
 #include <boost/bind.hpp>
 
@@ -105,8 +107,22 @@ static void set_qep_counter(int16_t value) {
 #define PIN_DIR_1_X
 #define PIN_DIR_0_X
 
-static void __disable_irq() { }
-static void __enable_irq() { }
+static void buffer_char(uint8_t c);
+
+extern "C" {
+	void SysTick_Handler(void);
+	void TIM2_IRQHandler(void);
+	void EXTI1_IRQHandler(void);
+}
+
+static std::mutex irq_mutex;
+
+static void __disable_irq() {
+	irq_mutex.lock();
+}
+static void __enable_irq() {
+	irq_mutex.unlock();
+}
 
 static int16_t qep_counter_int16 = 0;
 
@@ -117,6 +133,103 @@ static int16_t qep_counter() {
 static void set_qep_counter(int16_t value) {
 	qep_counter_int16 = value;
 }
+
+class uart_listener;
+
+static std::shared_ptr<uart_listener> uart_session;
+
+class uart_listener {
+public:
+	uart_listener() :
+		active(false),
+		socket(service),
+		acceptor(service, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::loopback(), 33333)) {
+		thread = std::thread([this]() { 
+			while (1) {
+				acceptor.async_accept(socket, boost::bind(&uart_listener::handle_accept, this, boost::asio::placeholders::error));
+				service.run(); 
+				socket.close();
+				service.reset(); 
+			}
+		});
+	}
+	
+	virtual ~uart_listener() {
+	}
+	
+	void handle_accept(const boost::system::error_code& err) {
+		boost::asio::ip::tcp::no_delay option(true);
+		socket.set_option(option);
+		uint8_t buf[256] = { 0 };
+		active = true;
+		while (1) {
+			try {
+				size_t len = socket.read_some(boost::asio::buffer(buf, sizeof(buf)));
+				for (int32_t c = 0; c < len; c++) {
+					buffer_char(buf[c]);
+				}
+			}
+			catch(...) {
+				active = false;
+				return;
+			}
+		}
+	}
+	
+	void put_char(uint8_t c) {
+		if (active) {
+			socket.send(boost::asio::buffer(&c, sizeof(c)));
+		}
+	}
+		
+private:
+	bool active;
+	boost::asio::io_service service;
+	std::thread thread;
+	boost::asio::ip::tcp::socket socket;
+	boost::asio::ip::tcp::acceptor acceptor;
+};
+
+class qenc_timer {
+public:
+	qenc_timer() {
+		thread = std::thread([]() {
+			const int32_t pulses_per_rev = 2880;
+			const int32_t rpm = 500;
+			const int32_t usecs = int32_t(1000000./((double(rpm)/60.0)*double(pulses_per_rev)));
+			while(1) {
+				std::this_thread::sleep_for(std::chrono::microseconds(usecs));
+				qep_counter_int16 ++;
+				TIM2_IRQHandler();
+				if (qep_counter_int16 == pulses_per_rev) {
+					EXTI1_IRQHandler();
+				}
+			}
+	 	});
+	}
+
+private:
+	std::thread thread;
+};
+
+static std::shared_ptr<qenc_timer> qenc_session;
+
+class systick_timer {
+public:
+	systick_timer() {
+		thread = std::thread([]() {
+			while(1) {
+			
+				std::this_thread::sleep_for(std::chrono::milliseconds(1));
+				SysTick_Handler();
+			}
+	 	});
+	}
+private:
+	std::thread thread;
+};
+
+static std::shared_ptr<systick_timer> systick_session;
 
 #endif  // #ifdef STM32
 
@@ -137,6 +250,20 @@ static void write_hex08(uint8_t *buf, uint32_t value) {
 	static const char *ntoh = "0123456789ABCDEF";
 	for (uint32_t c=0; c<8; c++) {
 		*buf++ = ntoh[(value >> ((7-c)*4)) & 0x0F];
+	}
+}
+
+static void write_hex04(uint8_t *buf, uint16_t value) {
+	static const char *ntoh = "0123456789ABCDEF";
+	for (uint32_t c=0; c<4; c++) {
+		*buf++ = ntoh[(value >> ((3-c)*4)) & 0x0F];
+	}
+}
+
+static void write_hex02(uint8_t *buf, uint8_t value) {
+	static const char *ntoh = "0123456789ABCDEF";
+	for (uint32_t c=0; c<2; c++) {
+		*buf++ = ntoh[(value >> ((1-c)*4)) & 0x0F];
 	}
 }
 
@@ -249,7 +376,6 @@ static int32_t absolute_idx = 0;
 static int32_t absolute_tick = 0;
 
 static int32_t current_index_delta = 0;
-static int32_t current_rpm = 0; 
 
 static int32_t wait_for_index_zero = 0;
 static int32_t index_zero_occured = 0;
@@ -366,7 +492,7 @@ static void put_char(uint8_t byte)
 
 #else  // #ifdef STM32
 
-
+	uart_session->put_char(byte);
 
 #endif  // #ifdef STM32
 }
@@ -450,6 +576,26 @@ void SysTick_Handler(void)
     }
     
     IWDG->KR  = 0xAAAA;
+
+#else  // #ifdef STM32
+	static int32_t counter = 0;
+	if (++counter == 500) {
+		counter = 0;
+
+		printf("Z:%08d X:%08d D:%08d A:%08d I:%08d T:%08d S:%08d R:%08d\n", 
+			stepper_actual_pos_z, 
+			stepper_actual_pos_x, 
+			stepper_actual_pos_d,
+			
+			absolute_pos,
+			absolute_idx,
+			absolute_tick,
+			
+			stepper_target_axis,
+			
+			current_run_mode
+		);
+	}
 #endif  // #ifdef STM32
 }
 
@@ -1563,35 +1709,26 @@ static void parse(void) {
                 // Get raw status
                 case 'S': {
 							int16_t cnt = qep_counter();
-                            uint8_t sts[256];
+
+                            static uint8_t sts[96] = { 0 };
                             size_t pos = 0;
-                            write_hex08(&sts[pos], uint32_t(absolute_pos + cnt)); pos += 8; 
+                            
+                            write_hex02(&sts[pos], uint32_t(current_run_mode)); pos += 2; 
+
+                            write_hex04(&sts[pos], uint32_t(absolute_tick)); pos += 4; 
+                            write_hex04(&sts[pos], uint32_t(cycle_counter)); pos += 4; 
+                            
+                            write_hex08(&sts[pos], uint32_t(absolute_pos)); pos += 8; 
+                            write_hex08(&sts[pos], uint32_t(absolute_idx)); pos += 8; 
+                            write_hex04(&sts[pos], uint32_t(cnt)); pos += 4; 
+                            write_hex04(&sts[pos], uint32_t(current_index_delta)); pos += 4; 
+
                             write_hex08(&sts[pos], uint32_t(stepper_actual_pos_z)); pos += 8; 
                             write_hex08(&sts[pos], uint32_t(stepper_actual_pos_x)); pos += 8; 
                             write_hex08(&sts[pos], uint32_t(stepper_actual_pos_d)); pos += 8; 
-                            write_hex08(&sts[pos], uint32_t(cnt)); pos += 8; 
-                            write_hex08(&sts[pos], uint32_t(absolute_idx)); pos += 8; 
-                            write_hex08(&sts[pos], uint32_t(current_index_delta)); pos += 8; 
-                            if (current_run_mode == run_mode_cycle) {
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().target_pos)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_mul_z)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_div_z)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_mul_x)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_div_x)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_mul_d)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(cycle_buffer.current().stepper_div_d)); pos += 8; 
-                            } else {
-                                write_hex08(&sts[pos], uint32_t(absolute_pos_start_offset)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(stepper_follow_mul_z)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(stepper_follow_div_z)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(stepper_follow_mul_x)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(stepper_follow_div_x)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(stepper_follow_mul_d)); pos += 8; 
-                                write_hex08(&sts[pos], uint32_t(stepper_follow_div_d)); pos += 8; 
-                            }
-                            write_hex08(&sts[pos], uint32_t(cycle_counter)); pos += 8; 
-                            write_hex08(&sts[pos], uint32_t((current_run_mode<<16) | (cycle_buffer.index_length()<<8) | (cycle_buffer.index()))); pos += 8; 
-                            write_hex08(&sts[pos], uint32_t(absolute_tick)); pos += 8; 
+                            
+							write_hex04(&sts[pos], uint32_t(cycle_buffer.index())); pos += 4; 
+							write_hex04(&sts[pos], uint32_t(cycle_buffer.index_length())); pos += 4; 
 
                             uint16_t crc = CRC16(reinterpret_cast<const uint8_t *>(sts), pos);
 
@@ -1623,7 +1760,6 @@ static void init_constants()
     absolute_pos = 0;
     absolute_idx = 0;
     absolute_tick = 0;
-    current_rpm = 0; 
 
     absolute_pos_start_offset = 0;
 
@@ -1643,28 +1779,6 @@ static void init_constants()
     stepper_follow_div_d = 1;
 }
 
-#ifndef STM32
-class systick_timer {
-public:
-	systick_timer() {
-		thread = std::thread([]() {
-			while(1) {
-			
-				std::this_thread::sleep_for(std::chrono::milliseconds(1));
-				SysTick_Handler();
-				static int32_t counter = 0;
-				if (++counter == 1000) {
-					counter = 0 ;
-					printf("%08d %08d %08d\n", stepper_actual_pos_z, stepper_actual_pos_x, stepper_actual_pos_d);
-				}
-			}
-	 	});
-	}
-private:
-	std::thread thread;
-};
-#endif  // #ifndef STM32
-
 static void init_systick(void)
 {
 #ifdef STM32
@@ -1674,7 +1788,6 @@ static void init_systick(void)
 
 #else  // #ifdef STM32
 
-	static std::shared_ptr<systick_timer> systick_session;
     systick_session = std::make_shared<systick_timer>();
 
 #endif  // #ifdef STM32
@@ -1756,37 +1869,6 @@ static void init_led(void)
 #endif  // #ifdef STM32
 }
 
-#ifndef STM32
-class uart_listener {
-public:
-	uart_listener() :
-		socket(service) ,
-		acceptor(service, boost::asio::ip::tcp::endpoint(boost::asio::ip::address_v4::loopback(), 33333)) {
-		acceptor.async_accept(socket, boost::bind(&uart_listener::handle_accept, this, boost::asio::placeholders::error));
-		thread = std::thread([this]() { service.run(); });
-	}
-	void handle_accept(const boost::system::error_code& err) {
-		uint8_t buf[256] = { 0 };
-		while (1) {
-			try {
-				size_t len = socket.read_some(boost::asio::buffer(buf, sizeof(buf)));
-				for (int32_t c = 0; c < len; c++) {
-					buffer_char(buf[c]);
-				}
-			}
-			catch(...) {
-				return;
-			}
-		}
-	}
-private:
-	boost::asio::io_service service;
-	std::thread thread;
-	boost::asio::ip::tcp::socket socket;
-	boost::asio::ip::tcp::acceptor acceptor;
-};
-#endif  // #ifndef STM32
-
 static void init_usart(uint32_t baudrate)
 {
 #ifdef STM32
@@ -1838,35 +1920,10 @@ static void init_usart(uint32_t baudrate)
     NVIC_SetPriority(USART1_IRQn, 255);
 #else  // #ifdef STM32
 
-	static std::shared_ptr<uart_listener> uart_session;
     uart_session = std::make_shared<uart_listener>();
 
 #endif  // #ifdef STM32
 }
-
-#ifndef STM32
-class qenc_timer {
-public:
-	qenc_timer() {
-		thread = std::thread([]() {
-			const int32_t pulses_per_rev = 2880;
-			const int32_t rpm = 500;
-			const int32_t usecs = int32_t(1000000./((double(rpm)/60.0)*double(pulses_per_rev)));
-			while(1) {
-				std::this_thread::sleep_for(std::chrono::microseconds(usecs));
-				qep_counter_int16 ++;
-				TIM2_IRQHandler();
-				if (qep_counter_int16 == pulses_per_rev) {
-					EXTI1_IRQHandler();
-				}
-			}
-	 	});
-	}
-
-private:
-	std::thread thread;
-};
-#endif  // #ifndef STM32
 
 static void init_qenc()
 {
@@ -1947,7 +2004,6 @@ static void init_qenc()
 
 #else  // #ifdef STM32
 
-	static std::shared_ptr<qenc_timer> qenc_session;
     qenc_session = std::make_shared<qenc_timer>();
 
 #endif  // #ifdef STM32

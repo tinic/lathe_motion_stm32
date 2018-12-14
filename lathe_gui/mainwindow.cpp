@@ -71,57 +71,45 @@ void MainWindow::update()
 
    QLabel *rawStatusLabel = findChild<QLabel *>("rawStatusLabel");
 
-   sprintf(str,"A:%c%010llx "
-               "Z:%c%010llx "
-               "X:%c%010llx "
-               "D:%c%010llx "
-               "R:%c%04lx "
-               "I:%c%04lx "
-               "D:%c%04lx "
-               "AO:%c%06lx "
-               "ZM:%c%06lx "
-               "ZD:%c%06lx "
-               "XM:%c%06lx "
-               "XD:%c%06lx "
-               "DM:%c%06lx "
-               "DD:%c%06lx "
-               "ES:%c%04lx "
-               "EO:%c%06lx "
-               "T:%c%08lx ",
+   sprintf(str,"Mode:%02x "
+               "Tick:%04x "
+               "Cycles:%04x "
+
+               "Pos:%c%08x "
+               "Index:%c%08x "
+               "Count:%c%04x "
+               "Delta:%04x "
+
+               "ZPos:%c%08x "
+               "XPos:%c%08x "
+               "DPos:%c%08x "
+
+               "CycleI:%04x "
+               "CycleL:%04x ",
+
+           local_packet.current_run_mode,
+           local_packet.absolute_tick,
+           local_packet.cycle_counter,
+
            local_packet.absolute_pos >=0 ? '+' : '-',
-           llabs(local_packet.absolute_pos),
+           labs(local_packet.absolute_pos),
+           local_packet.absolute_idx >=0 ? '+' : '-',
+           labs(local_packet.absolute_idx),
+           local_packet.absolute_cnt >=0 ? '+' : '-',
+           labs(local_packet.absolute_cnt),
+
+           local_packet.current_index_delta,
+
            local_packet.stepper_actual_pos_z >=0 ? '+' : '-',
            llabs(local_packet.stepper_actual_pos_z),
            local_packet.stepper_actual_pos_x >=0 ? '+' : '-',
            llabs(local_packet.stepper_actual_pos_x),
            local_packet.stepper_actual_pos_d >=0 ? '+' : '-',
            llabs(local_packet.stepper_actual_pos_d),
-           local_packet.absolute_cnt >=0 ? '+' : '-',
-           labs(local_packet.absolute_cnt),
-           local_packet.absolute_idx >=0 ? '+' : '-',
-           labs(local_packet.absolute_idx),
-           local_packet.current_index_delta >=0 ? '+' : '-',
-           labs(local_packet.current_index_delta),
-           local_packet.absolute_pos_start_offset >=0 ? '+' : '-',
-           labs(local_packet.absolute_pos_start_offset),
-           local_packet.stepper_follow_mul_z >=0 ? '+' : '-',
-           labs(local_packet.stepper_follow_mul_z),
-           local_packet.stepper_follow_div_z >=0 ? '+' : '-',
-           labs(local_packet.stepper_follow_div_z),
-           local_packet.stepper_follow_mul_x >=0 ? '+' : '-',
-           labs(local_packet.stepper_follow_mul_x),
-           local_packet.stepper_follow_div_x >=0 ? '+' : '-',
-           labs(local_packet.stepper_follow_div_x),
-           local_packet.stepper_follow_mul_d >=0 ? '+' : '-',
-           labs(local_packet.stepper_follow_mul_d),
-           local_packet.stepper_follow_div_d >=0 ? '+' : '-',
-           labs(local_packet.stepper_follow_div_d),
-           local_packet.error_state_out_of_sync >=0 ? '+' : '-',
-           labs(local_packet.error_state_out_of_sync),
-           local_packet.current_mode >=0 ? '+' : '-',
-           labs(local_packet.current_mode),
-           local_packet.absolute_tick >=0 ? '+' : '-',
-           labs(local_packet.absolute_tick));
+
+           local_packet.cycle_index,
+           local_packet.cycle_index_count);
+
    rawStatusLabel->setText(str);
 }
 

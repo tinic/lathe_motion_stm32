@@ -5,24 +5,25 @@
 #include <QMutex>
 #include <QThread>
 
+#define LOCAL_SOCKET
+
+#ifdef LOCAL_SOCKET
+#include <QtNetwork>
+#endif  // #ifdef LOCAL_SOCKET
+
 struct lathe_status_packet {
+        int32_t current_run_mode;
+        int32_t absolute_tick;
+        int32_t cycle_counter;
         int32_t absolute_pos;
+        int32_t absolute_idx;
+        int32_t absolute_cnt;
+        int32_t current_index_delta;
         int32_t stepper_actual_pos_z;
         int32_t stepper_actual_pos_x;
         int32_t stepper_actual_pos_d;
-        int32_t absolute_cnt;
-        int32_t absolute_idx;
-        int32_t current_index_delta;
-        int32_t absolute_pos_start_offset;
-        int32_t stepper_follow_mul_z;
-        int32_t stepper_follow_div_z;
-        int32_t stepper_follow_mul_x;
-        int32_t stepper_follow_div_x;
-        int32_t stepper_follow_mul_d;
-        int32_t stepper_follow_div_d;
-        int32_t error_state_out_of_sync;
-        int32_t current_mode;
-        int32_t absolute_tick;
+        int32_t cycle_index;
+        int32_t cycle_index_count;
 };
 
 class CommThread : public QObject
@@ -30,6 +31,7 @@ class CommThread : public QObject
     Q_OBJECT
 public:
     explicit CommThread(QObject *parent = nullptr);
+    virtual ~CommThread();
     bool keepRunning;
 
     QMutex mutex;
@@ -43,6 +45,12 @@ public:
     bool idle;
     bool stop;
 
+#ifdef LOCAL_SOCKET
+    QTcpSocket *socket;
+#else  // #ifdef LOCAL_SOCKET
+    int fd;
+#endif   // #ifdef LOCAL_SOCKET
+
     std::string cprog;
 
 signals:
@@ -53,8 +61,8 @@ public slots:
     void newfeed();
 
 private:
-    std::string read_response(int fd, bool &bad_crc);
-    void send_command(int fd, std::string &cmd);
+    std::string read_response(bool &bad_crc);
+    void send_command(std::string &cmd);
 };
 
 #endif // COMMTHREAD_H
