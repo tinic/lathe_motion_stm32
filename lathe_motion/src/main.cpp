@@ -1645,21 +1645,24 @@ static void init_constants()
 
 #ifndef STM32
 class systick_timer {
-
 public:
 	systick_timer() {
 		thread = std::thread([]() {
 			while(1) {
+			
 				std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				SysTick_Handler();
+				static int32_t counter = 0;
+				if (++counter == 1000) {
+					counter = 0 ;
+					printf("%08d %08d %08d\n", stepper_actual_pos_z, stepper_actual_pos_x, stepper_actual_pos_d);
+				}
 			}
 	 	});
 	}
-
 private:
 	std::thread thread;
 };
-
 #endif  // #ifndef STM32
 
 static void init_systick(void)
@@ -1843,7 +1846,6 @@ static void init_usart(uint32_t baudrate)
 
 #ifndef STM32
 class qenc_timer {
-
 public:
 	qenc_timer() {
 		thread = std::thread([]() {
@@ -1853,9 +1855,9 @@ public:
 			while(1) {
 				std::this_thread::sleep_for(std::chrono::microseconds(usecs));
 				qep_counter_int16 ++;
+				TIM2_IRQHandler();
 				if (qep_counter_int16 == pulses_per_rev) {
-					TIM2_IRQHandler();
-					qep_counter_int16 = 0;
+					EXTI1_IRQHandler();
 				}
 			}
 	 	});
@@ -1864,7 +1866,6 @@ public:
 private:
 	std::thread thread;
 };
-
 #endif  // #ifndef STM32
 
 static void init_qenc()
