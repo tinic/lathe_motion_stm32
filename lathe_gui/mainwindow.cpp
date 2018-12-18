@@ -1,6 +1,10 @@
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "gcode.h"
 
+#include <iostream>
+#include <sstream>
+#include <fstream>
 #include <math.h>
 #include <QLabel>
 #include <QFileDialog>
@@ -8,6 +12,8 @@
 #include <QMessageBox>
 #include <QTextStream>
 #include <QPlainTextEdit>
+#include <QTableView>
+#include <QStandardItemModel>
 
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
@@ -180,37 +186,72 @@ void MainWindow::passToCommThread()
     commThread.mutex.unlock();
 }
 
+GCodeListModel::GCodeListModel(const GCodeParser &parser, QObject* parent):
+    parser(parser)
+{
+}
+
+int GCodeListModel::rowCount(const QModelIndex &parent) const {
+    return parser.g_code().size();
+}
+
+int GCodeListModel::columnCount(const QModelIndex &parent) const {
+    return 2;
+}
+
+QVariant GCodeListModel::data(const QModelIndex &index, int role) const {
+    if (!index.isValid()) return QVariant();
+    if (index.row() >= parser.g_code().size()) return QVariant();
+    if (role == Qt::DisplayRole) {
+        if (index.column() == 0 ) {
+            return QVariant(QString::number(index.row()));
+        } else if (index.column() == 1) {
+            return QVariant(QString::fromStdString(parser.g_code()[index.row()]));
+        } else {
+            return QVariant();
+        }
+    } else {
+        return QVariant();
+    }
+}
+
 void MainWindow::progLoadClicked()
 {
-    QPlainTextEdit *progText = findChild<QPlainTextEdit *>("progText");
+    QTableView *progTableView = findChild<QTableView *>("progTableView");
 
     QString fileName = QFileDialog::getOpenFileName(nullptr,
         tr("Open Command File"), "",
-        tr("Text File (*.txt);;All Files (*)"));
+        tr("NC File (*.nc);;All Files (*)"));
+
     if (fileName.length()>0) {
-        QFile file(fileName);
+        std::ifstream t(fileName.toStdString());
+        parser.loadAndParse(t);
 
-        if (!file.open(QIODevice::ReadOnly)) {
-            QMessageBox::information(this, tr("Unable to open file"),
-                file.errorString());
-            return;
+        QStandardItemModel *model = new QStandardItemModel(parser.g_code().size(), 2);
+
+        for(size_t c=0; c<parser.g_code().size();c++) {
+            QStandardItem *col0 = new QStandardItem(QString::number(c));
+            model->setItem(c,0,col0);
+            QStandardItem *col1 = new QStandardItem(QString::fromStdString(parser.g_code()[c]));
+            model->setItem(c,1,col1);
         }
 
-        progText->clear();
+//        model->setHeaderData(0, Qt::Horizontal, QObject::tr("LINE"));
+//        model->setHeaderData(1, Qt::Horizontal, QObject::tr("CODE"));
 
-        QTextStream in(&file);
-        QString line;
-        while (in.readLineInto(&line)) {
-            progText->appendPlainText(line);
-        }
+        progTableView->setModel(model);
+        progTableView->update();
+        progTableView->show();
+
+        progTableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
     }
 }
 
 void MainWindow::progRunClicked()
 {
     commThread.mutex.lock();
-    QPlainTextEdit *progText = findChild<QPlainTextEdit *>("progText");
-    commThread.cprog = progText->toPlainText().toStdString();
+    QTableView *progTableView = findChild<QTableView *>("progTableView");
+    //commThread.cprog = progListView->toPlainText().toStdString();
     commThread.mutex.unlock();
 }
 

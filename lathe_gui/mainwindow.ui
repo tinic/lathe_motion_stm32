@@ -845,13 +845,18 @@ QPushButton:pressed {
          </layout>
         </item>
         <item>
-         <widget class="QPlainTextEdit" name="progText">
-          <property name="font">
-           <font>
-            <family>Monospace</family>
-            <pointsize>12</pointsize>
-           </font>
+         <widget class="QTableWidget" name="progTableView">
+          <property name="gridStyle">
+           <enum>Qt::SolidLine</enum>
           </property>
+          <property name="rowCount">
+           <number>0</number>
+          </property>
+          <property name="columnCount">
+           <number>2</number>
+          </property>
+          <column/>
+          <column/>
          </widget>
         </item>
        </layout>
@@ -1211,7 +1216,7 @@ POSX: +0000.00</string>
      <x>0</x>
      <y>0</y>
      <width>1366</width>
-     <height>15</height>
+     <height>22</height>
     </rect>
    </property>
   </widget>

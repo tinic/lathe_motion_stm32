@@ -4,6 +4,7 @@
 #include <QMainWindow>
 
 #include "commthread.h"
+#include "gcode.h"
 
 class TerminateableThread : public QThread {
     Q_OBJECT
@@ -16,6 +17,16 @@ public:
 namespace Ui {
 class MainWindow;
 }
+
+class GCodeListModel : public QAbstractListModel {
+public:
+    explicit GCodeListModel(const GCodeParser &parser, QObject* parent = 0);
+    int rowCount(const QModelIndex &parent = QModelIndex()) const;
+    int columnCount(const QModelIndex &parent = QModelIndex()) const;
+    QVariant data(const QModelIndex &index, int role) const;
+private:
+    const GCodeParser &parser;
+};
 
 class MainWindow : public QMainWindow
 {
@@ -93,6 +104,8 @@ private:
     double currentDirectionValue;
     double currentStepValue;
     double currentAngleValue;
+
+    GCodeParser parser;
 
     CommThread commThread;
     TerminateableThread qThread;
