@@ -51,7 +51,7 @@ public:
     int fd;
 #endif   // #ifdef LOCAL_SOCKET
 
-    std::string cprog;
+    std::vector<std::string> code;
 
 signals:
     void update();

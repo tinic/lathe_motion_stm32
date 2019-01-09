@@ -238,9 +238,38 @@ static uint32_t parse_hex08(const uint8_t *buf) {
 	for (uint32_t c=0; c<8; c++) {
 		if (buf[c] >= 0x30 && buf[c] <= 0x39) {
 			value |= (buf[c] - 0x30       ) << ((7-c)*4);
-		}
-		if (buf[c] >= 0x41 && buf[c] <= 0x46) {
+		} else if (buf[c] >= 0x41 && buf[c] <= 0x46) {
 			value |= (buf[c] - 0x41 + 0x0A) << ((7-c)*4);
+		} else if (buf[c] >= 0x61 && buf[c] <= 0x66) {
+			value |= (buf[c] - 0x61 + 0x0A) << ((7-c)*4);
+		}
+	}
+	return value;
+}
+
+static uint32_t parse_hex04(const uint8_t *buf) {
+	uint32_t value = 0;
+	for (uint32_t c=0; c<4; c++) {
+		if (buf[c] >= 0x30 && buf[c] <= 0x39) {
+			value |= (buf[c] - 0x30       ) << ((7-c)*4);
+		} else if (buf[c] >= 0x41 && buf[c] <= 0x46) {
+			value |= (buf[c] - 0x41 + 0x0A) << ((7-c)*4);
+		} else if (buf[c] >= 0x61 && buf[c] <= 0x66) {
+			value |= (buf[c] - 0x61 + 0x0A) << ((7-c)*4);
+		}
+	}
+	return value;
+}
+
+static uint32_t parse_hex02(const uint8_t *buf) {
+	uint32_t value = 0;
+	for (uint32_t c=0; c<2; c++) {
+		if (buf[c] >= 0x30 && buf[c] <= 0x39) {
+			value |= (buf[c] - 0x30       ) << ((7-c)*4);
+		} else if (buf[c] >= 0x41 && buf[c] <= 0x46) {
+			value |= (buf[c] - 0x41 + 0x0A) << ((7-c)*4);
+		} else if (buf[c] >= 0x61 && buf[c] <= 0x66) {
+			value |= (buf[c] - 0x61 + 0x0A) << ((7-c)*4);
 		}
 	}
 	return value;
@@ -1465,6 +1494,7 @@ static void parse(void) {
                 break;
             }
         } else {
+        	buf[buf_pos] = 0;
             if (buf_pos<4) {
                 send_invalid_response();
                 buf_pos = 0;
@@ -1548,7 +1578,7 @@ static void parse(void) {
                             size_t pos = 1;
                             bool ok_to_run = true;
 
-                            if (buf_pos < (1 + 1 + size_of_crc)) {
+                            if (buf_pos < (1 + size_of_crc)) {
                                 send_invalid_response();
                                 break;
                             }
@@ -1606,22 +1636,78 @@ static void parse(void) {
                                 break;
                             }
 
-                            if (buf_pos < (1 + 1 + size_of_crc + 64)) {
+
+                            cycle_buffer::cycle_entry entry;
+
+							int32_t buf_check_size = 1 + 1 + size_of_crc;
+                            if (buf_pos < buf_check_size) {
                                 send_invalid_response();
                                 break;
                             }
 
-                            cycle_buffer::cycle_entry entry;
-                            entry.target_axs = (buf[pos] == 'X') ? 1 : ( (buf[pos] == 'D') ? 2 : 0); pos++;
+                            entry.target_axs = (buf[pos] == 'X') ? 1 : ( (buf[pos] == 'D') ? 2 : 0); pos+=1;
+                            
+                            buf_check_size += 2;
+                            if (buf_pos < buf_check_size) {
+                                send_invalid_response();
+                                break;
+                            }
 
-                            entry.target_pos = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.stepper_mul_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.stepper_div_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.stepper_mul_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.stepper_div_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.stepper_mul_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.stepper_div_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
-                            entry.wait_for_index_zero = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            uint8_t flags = uint8_t(parse_hex02((const uint8_t *)&buf[pos])); pos += 2;
+
+
+							int32_t target_pos_z = 0;                            
+							int32_t target_pos_x = 0;                            
+							int32_t target_pos_d = 0;         
+							
+							#define SET_Z_FLAG 0x01
+							#define SET_X_FLAG 0x02
+							#define SET_D_FLAG 0x04
+							#define WAIT_FLAG  0x10
+
+                            if (flags & SET_Z_FLAG) {
+								buf_check_size += 24;
+								if (buf_pos < buf_check_size) {
+									send_invalid_response();
+									break;
+								}
+								target_pos_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+								entry.stepper_mul_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+								entry.stepper_div_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+                            } else {
+								entry.stepper_mul_z = 0;
+								entry.stepper_div_z = 1;
+                            }
+
+                            if (flags & SET_X_FLAG) {
+								buf_check_size += 24;
+								if (buf_pos < buf_check_size) {
+									send_invalid_response();
+									break;
+								}
+								target_pos_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+								entry.stepper_mul_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+								entry.stepper_div_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+							} else {
+								entry.stepper_mul_x = 0;
+								entry.stepper_div_x = 1;
+							}
+
+                            if (flags & SET_D_FLAG) {
+								buf_check_size += 24;
+								if (buf_pos < buf_check_size) {
+									send_invalid_response();
+									break;
+								}
+								target_pos_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+								entry.stepper_mul_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+								entry.stepper_div_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
+							} else {
+								entry.stepper_mul_d = 0;
+								entry.stepper_div_d = 1;
+							}
+
+                            entry.wait_for_index_zero = (flags & WAIT_FLAG) ? 1 : 0;
 
                             entry.stepper_mul_z = -entry.stepper_mul_z;
                             entry.stepper_mul_x = -entry.stepper_mul_x;
@@ -1630,15 +1716,17 @@ static void parse(void) {
                             if (entry.stepper_div_z <= 0 ||
                                 entry.stepper_div_x <= 0 ||
                                 entry.stepper_div_d <= 0) {
-                                ok_to_run = false;
+                                send_invalid_response();
+                                break;
                             }
 
                             int32_t gcd_z = gcd(entry.stepper_mul_z, entry.stepper_div_z); entry.stepper_mul_z /= gcd_z; entry.stepper_div_z /= gcd_z;
                             int32_t gcd_x = gcd(entry.stepper_mul_x, entry.stepper_div_x); entry.stepper_mul_x /= gcd_x; entry.stepper_div_x /= gcd_x;
                             int32_t gcd_d = gcd(entry.stepper_mul_d, entry.stepper_div_d); entry.stepper_mul_d /= gcd_d; entry.stepper_div_d /= gcd_d;
-
+                            
                             switch(entry.target_axs) {
                                 case 0: {
+                                	entry.target_pos = target_pos_z;
                                     if (entry.stepper_mul_z < 0 && entry.target_pos <= prev_target_z) {
                                         ok_to_run = false;
                                     }
@@ -1650,6 +1738,7 @@ static void parse(void) {
                                     }
                                 } break;
                                 case 1: {
+                                	entry.target_pos = target_pos_x;
                                     if (entry.stepper_mul_x < 0 && entry.target_pos <= prev_target_x) {
                                         ok_to_run = false;
                                     }
@@ -1661,6 +1750,7 @@ static void parse(void) {
                                     }
                                 } break;
                                 case 2: {
+                                	entry.target_pos = target_pos_d;
                                     if (entry.stepper_mul_d < 0 && entry.target_pos <= prev_target_d) {
                                         ok_to_run = false;
                                     }
@@ -1673,18 +1763,16 @@ static void parse(void) {
                                 } break;
                             }
 
-							switch(entry.target_axs) {
-								case 0: {
-									prev_target_z = entry.target_pos; 
-								} break;
-								case 1: {
-									prev_target_x = entry.target_pos; 
-								} break;
-								case 2: {
-									prev_target_d = entry.target_pos; 
-								} break;
-							}
-
+                            if (flags & SET_Z_FLAG) {
+                            	prev_target_z = target_pos_z;
+                            }
+                            if (flags & SET_X_FLAG) {
+                            	prev_target_x = target_pos_x;
+                            }
+                            if (flags & SET_D_FLAG) {
+                            	prev_target_d = target_pos_d;
+                            }
+                            
 							// push cycle
 							cycle_buffer.push(entry);
 

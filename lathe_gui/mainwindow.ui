@@ -27,6 +27,9 @@ QPushButton {
  					   border: 2px solid #666666;
 					    border-width: 2px;
 						border-radius: 8px;
+					font-family: 'Lekton', sans-serif;
+				    font-size: 32px;
+				    font-weight: 700;
 }
 QPushButton:checked {
                         color: white;
@@ -42,7 +45,14 @@ QPushButton:pressed {
 					   border-width: 2px;
 						border-radius: 8px;
 }
-</string>
+QTableView {
+					color: white;
+					font-family: 'Space Mono', monospace;
+}
+QHeaderView {
+					color: white;
+					font-family: 'Space Mono', monospace;
+}</string>
   </property>
   <widget class="QWidget" name="centralWidget">
    <layout class="QGridLayout" name="gridLayout_4">
@@ -87,14 +97,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -116,14 +118,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -147,15 +141,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-          <kerning>true</kerning>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -174,14 +159,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -202,14 +179,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -228,14 +197,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -256,14 +217,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -282,14 +235,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -310,14 +255,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -336,14 +273,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -364,14 +293,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -390,14 +311,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -418,14 +331,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -444,14 +349,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -472,14 +369,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -498,14 +387,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -526,14 +407,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -552,14 +425,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -580,14 +445,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -606,14 +463,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -634,14 +483,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -660,14 +501,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -688,14 +521,6 @@ QPushButton:pressed {
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="styleSheet">
          <string notr="true"/>
         </property>
@@ -714,14 +539,6 @@ QPushButton:pressed {
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>24</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="styleSheet">
          <string notr="true"/>
@@ -753,14 +570,6 @@ QPushButton:pressed {
               <height>48</height>
              </size>
             </property>
-            <property name="font">
-             <font>
-              <family>Lekton</family>
-              <pointsize>40</pointsize>
-              <weight>75</weight>
-              <bold>true</bold>
-             </font>
-            </property>
             <property name="text">
              <string>LOAD</string>
             </property>
@@ -773,14 +582,6 @@ QPushButton:pressed {
               <width>0</width>
               <height>48</height>
              </size>
-            </property>
-            <property name="font">
-             <font>
-              <family>Lekton</family>
-              <pointsize>40</pointsize>
-              <weight>75</weight>
-              <bold>true</bold>
-             </font>
             </property>
             <property name="text">
              <string>SEND</string>
@@ -795,14 +596,6 @@ QPushButton:pressed {
               <height>48</height>
              </size>
             </property>
-            <property name="font">
-             <font>
-              <family>Lekton</family>
-              <pointsize>40</pointsize>
-              <weight>75</weight>
-              <bold>true</bold>
-             </font>
-            </property>
             <property name="text">
              <string>PAUSE</string>
             </property>
@@ -815,14 +608,6 @@ QPushButton:pressed {
               <width>0</width>
               <height>48</height>
              </size>
-            </property>
-            <property name="font">
-             <font>
-              <family>Lekton</family>
-              <pointsize>40</pointsize>
-              <weight>75</weight>
-              <bold>true</bold>
-             </font>
             </property>
             <property name="text">
              <string>CLEAR</string>
@@ -845,19 +630,7 @@ QPushButton:pressed {
          </layout>
         </item>
         <item>
-         <widget class="QTableWidget" name="progTableView">
-          <property name="gridStyle">
-           <enum>Qt::SolidLine</enum>
-          </property>
-          <property name="rowCount">
-           <number>0</number>
-          </property>
-          <property name="columnCount">
-           <number>2</number>
-          </property>
-          <column/>
-          <column/>
-         </widget>
+         <widget class="QTableView" name="progTableView"/>
         </item>
        </layout>
       </item>
@@ -865,16 +638,12 @@ QPushButton:pressed {
     </item>
     <item row="1" column="0">
      <widget class="QLabel" name="statusLabel">
-      <property name="font">
-       <font>
-        <family>Lekton</family>
-        <pointsize>42</pointsize>
-        <weight>75</weight>
-        <bold>true</bold>
-       </font>
-      </property>
       <property name="styleSheet">
-       <string notr="true">color: white;</string>
+       <string notr="true">color: white;
+font-family: 'Space Mono', monospace;
+font-weight: 700;
+font-size: 48px;
+</string>
       </property>
       <property name="frameShape">
        <enum>QFrame::NoFrame</enum>
@@ -911,12 +680,6 @@ POSX: +0000.00</string>
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>OpenSymbol</family>
-          <pointsize>40</pointsize>
-         </font>
-        </property>
         <property name="text">
          <string></string>
         </property>
@@ -930,12 +693,6 @@ POSX: +0000.00</string>
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>OpenSymbol</family>
-          <pointsize>40</pointsize>
-         </font>
-        </property>
         <property name="text">
          <string></string>
         </property>
@@ -948,14 +705,6 @@ POSX: +0000.00</string>
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>40</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="text">
          <string>STOP!</string>
@@ -981,8 +730,10 @@ POSX: +0000.00</string>
         </property>
         <property name="font">
          <font>
-          <family>OpenSymbol</family>
-          <pointsize>40</pointsize>
+          <family>Lekton,sans-serif</family>
+          <pointsize>-1</pointsize>
+          <weight>87</weight>
+          <bold>true</bold>
          </font>
         </property>
         <property name="autoFillBackground">
@@ -1003,8 +754,10 @@ POSX: +0000.00</string>
         </property>
         <property name="font">
          <font>
-          <family>OpenSymbol</family>
-          <pointsize>40</pointsize>
+          <family>Lekton,sans-serif</family>
+          <pointsize>-1</pointsize>
+          <weight>87</weight>
+          <bold>true</bold>
          </font>
         </property>
         <property name="text">
@@ -1022,8 +775,10 @@ POSX: +0000.00</string>
         </property>
         <property name="font">
          <font>
-          <family>OpenSymbol</family>
-          <pointsize>40</pointsize>
+          <family>Lekton,sans-serif</family>
+          <pointsize>-1</pointsize>
+          <weight>87</weight>
+          <bold>true</bold>
          </font>
         </property>
         <property name="text">
@@ -1048,14 +803,6 @@ POSX: +0000.00</string>
           <height>64</height>
          </size>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>40</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="text">
          <string>Z</string>
         </property>
@@ -1071,14 +818,6 @@ POSX: +0000.00</string>
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>40</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="text">
          <string>X</string>
@@ -1104,8 +843,10 @@ POSX: +0000.00</string>
         </property>
         <property name="font">
          <font>
-          <family>OpenSymbol</family>
-          <pointsize>40</pointsize>
+          <family>Lekton,sans-serif</family>
+          <pointsize>-1</pointsize>
+          <weight>87</weight>
+          <bold>true</bold>
          </font>
         </property>
         <property name="text">
@@ -1130,14 +871,6 @@ POSX: +0000.00</string>
           <height>64</height>
          </size>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>40</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="text">
          <string>ZERO</string>
         </property>
@@ -1150,14 +883,6 @@ POSX: +0000.00</string>
           <horstretch>0</horstretch>
           <verstretch>0</verstretch>
          </sizepolicy>
-        </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>40</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
         </property>
         <property name="text">
          <string>IDLE</string>
@@ -1175,14 +900,6 @@ POSX: +0000.00</string>
           <verstretch>0</verstretch>
          </sizepolicy>
         </property>
-        <property name="font">
-         <font>
-          <family>Lekton</family>
-          <pointsize>40</pointsize>
-          <weight>75</weight>
-          <bold>true</bold>
-         </font>
-        </property>
         <property name="text">
          <string>GOTOZ</string>
         </property>
@@ -1192,14 +909,6 @@ POSX: +0000.00</string>
     </item>
     <item row="0" column="0" colspan="3">
      <widget class="QLabel" name="rawStatusLabel">
-      <property name="font">
-       <font>
-        <family>Lekton</family>
-        <pointsize>10</pointsize>
-        <weight>75</weight>
-        <bold>true</bold>
-       </font>
-      </property>
       <property name="styleSheet">
        <string notr="true">color: grey;</string>
       </property>

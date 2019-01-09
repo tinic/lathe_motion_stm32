@@ -32,10 +32,10 @@ private:
        std::vector<std::string> _intcode;
        std::vector<std::string> _gcode;
 
-       std::map<uint32_t,uint32_t> _blockmap;
-       std::map<uint32_t,uint32_t> _intmap;
+       std::map<size_t,size_t> _blockmap;
+       std::map<size_t,size_t> _intmap;
 
-       int32_t current_block;
+       size_t current_block;
        int32_t current_bytes;
 
        int32_t prev_z_mul;

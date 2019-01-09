@@ -227,19 +227,28 @@ void MainWindow::progLoadClicked()
         std::ifstream t(fileName.toStdString());
         parser.loadAndParse(t);
 
-        QStandardItemModel *model = new QStandardItemModel(parser.g_code().size(), 2);
+        QStandardItemModel *model = new QStandardItemModel(parser.g_code().size(), 1);
 
         for(size_t c=0; c<parser.g_code().size();c++) {
-            QStandardItem *col0 = new QStandardItem(QString::number(c));
-            model->setItem(c,0,col0);
             QStandardItem *col1 = new QStandardItem(QString::fromStdString(parser.g_code()[c]));
-            model->setItem(c,1,col1);
+            if ((c&1) == 0) {
+                col1->setBackground(QBrush(QColor(32,32,32)));
+            } else {
+                col1->setBackground(QBrush(QColor(64,64,64)));
+            }
+            model->setItem(c,0,col1);
         }
 
-//        model->setHeaderData(0, Qt::Horizontal, QObject::tr("LINE"));
-//        model->setHeaderData(1, Qt::Horizontal, QObject::tr("CODE"));
+        model->setHeaderData(0, Qt::Horizontal, QObject::tr("CODE"));
 
         progTableView->setModel(model);
+
+        progTableView->setShowGrid(false);
+
+        progTableView->horizontalHeader()->setStretchLastSection(true);
+        progTableView->horizontalHeader()->setStyleSheet("background: white; color: black");
+        progTableView->verticalHeader()->setStyleSheet("background: white; color: black");
+
         progTableView->update();
         progTableView->show();
 
@@ -250,8 +259,7 @@ void MainWindow::progLoadClicked()
 void MainWindow::progRunClicked()
 {
     commThread.mutex.lock();
-    QTableView *progTableView = findChild<QTableView *>("progTableView");
-    //commThread.cprog = progListView->toPlainText().toStdString();
+    commThread.code = parser.intermediate_code();
     commThread.mutex.unlock();
 }
 

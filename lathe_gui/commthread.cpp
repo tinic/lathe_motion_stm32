@@ -269,22 +269,20 @@ void CommThread::run() {
 
         }
 
-        if (cprog.size()>0) {
-            std::stringstream ss(cprog);
-            while (!ss.eof()) {
-                char cmd[128] = {0};
-                ss.getline(cmd, 128);
-                size_t len = strlen(cmd);
-                if (len == 0) {
-                    break;
-                }
-                qDebug("'%s' %d", cmd, strlen(cmd));
-                std::string cmds(cmd);
-                send_command(cmds);
+        if (code.size()>0) {
+            std::string cmdCR("CR");
+            send_command(cmdCR);
+            read_response(bad_crc);
+            for (auto cmd : code) {
+                qDebug("%s", cmd.c_str());
+                send_command(cmd);
                 std::string response = read_response(bad_crc);
                 qDebug("%s", response.c_str());
             }
-            cprog = "";
+            code.clear();
+            std::string cmdCS("CS");
+            send_command(cmdCS);
+            read_response(bad_crc);
         }
 
         std::string cmd("S");

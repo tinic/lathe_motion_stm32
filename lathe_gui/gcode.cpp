@@ -12,6 +12,9 @@
 #include <iostream>
 #include <sstream>
 #include <streambuf>
+#include <iomanip>
+
+#include <QObject>
 
 #include <math.h>
 
@@ -858,6 +861,8 @@ void GCodeParser::output_intermediate(
             double feed_rate,
             bool wait_for_index) {
 
+  qDebug("0 %g %g %g %g", target_x_pos, target_y_pos, target_z_pos, feed_rate);
+
   static double prev_target_x_pos = 0;
   static double prev_target_y_pos = 0;
   static double prev_target_z_pos = 0;
@@ -906,15 +911,21 @@ void GCodeParser::output_intermediate(
       target_feed_y = 0;
       target_feed_z = feed_rate * sign_z;
   }
+
+  qDebug("1 %g %g %g %g", target_feed_x, target_feed_z, target_feed_y, double(axis_mode));
+
   int32_t target_pos = 0;
   switch(axis_mode) {
     case 0: {
+      if (target_feed_x == 0) return;
       target_pos = int32_t(mm_to_step_x(target_x_pos));
     } break;
     case 1: {
+      if (target_feed_y == 0) return;
       target_pos = int32_t(mm_to_step_y(target_y_pos));
     } break;
     case 2: {
+      if (target_feed_z == 0) return;
       target_pos = int32_t(mm_to_step_z(target_z_pos));
     } break;
   }
@@ -983,24 +994,51 @@ void GCodeParser::output_intermediate(
   prev_d_mul = d_mul;
   prev_d_div = d_div;
 
-  char str[256] = { 0 };
-  sprintf(str,"%c"
-              "%08x"
-              "%08x" "%08x"
-              "%08x" "%08x"
-              "%08x" "%08x"
-              "%08x",
-              (axis_mode == 0) ? 'X' : ((axis_mode == 1) ? 'D' : 'Z'),
-              target_pos,
-              (z_mul && dz) ? z_mul : 0,
-              (z_mul && dz) ? z_div : 0,
-              (x_mul && dx) ? x_mul : 0,
-              (x_mul && dx) ? x_div : 0,
-              (d_mul && dy) ? d_mul : 0,
-              (d_mul && dy) ? d_div : 0,
-              wait_for_index?1:0);
+  std::stringstream ss;
 
-  _intcode.push_back(std::string(str));
+  ss << 'C';
+
+  ss << ((axis_mode == 0) ? 'X' : ((axis_mode == 1) ? 'D' : 'Z'));
+
+  ss << std::hex;
+  ss << std::right;
+  ss << std::uppercase;
+  ss << std::setfill('0');
+
+  ss << std::setw(2);
+  ss << (((z_mul && dz != 0.0) ? 0x01 : 0x00) |
+         ((x_mul && dx != 0.0) ? 0x02 : 0x00) |
+         ((d_mul && dy != 0.0) ? 0x04 : 0x00) |
+         (wait_for_index ? 0x10:0));
+
+  if ((z_mul && dz != 0.0)) {
+      ss << std::setw(8);
+      ss << int32_t(mm_to_step_x(target_z_pos));
+      ss << std::setw(8);
+      ss << z_mul;
+      ss << std::setw(8);
+      ss << z_div;
+  }
+
+  if ((x_mul && dx != 0.0)) {
+      ss << std::setw(8);
+      ss << int32_t(mm_to_step_x(target_x_pos));
+      ss << std::setw(8);
+      ss << x_mul;
+      ss << std::setw(8);
+      ss << x_div;
+  }
+
+  if ((d_mul && dy != 0.0)) {
+      ss << std::setw(8);
+      ss << int32_t(mm_to_step_x(target_y_pos));
+      ss << std::setw(8);
+      ss << d_mul;
+      ss << std::setw(8);
+      ss << d_div;
+  }
+
+  _intcode.push_back(ss.str());
   _blockmap[_intcode.size()] = current_block;
   _intmap[current_block] = _intcode.size();
 
