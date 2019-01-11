@@ -15,6 +15,19 @@
 #include <QTableView>
 #include <QStandardItemModel>
 
+enum run_mode {
+    run_mode_idle,
+    run_mode_none,
+
+    run_mode_follow_z,
+    run_mode_follow_x,
+    run_mode_follow_d,
+    run_mode_follow_zxd,
+
+    run_mode_cycle,
+    run_mode_cycle_pause
+};
+
 MainWindow::MainWindow(QWidget *parent) :
     QMainWindow(parent),
     ui(new Ui::MainWindow),
@@ -116,13 +129,63 @@ void MainWindow::update()
            local_packet.cycle_index,
            local_packet.cycle_index_count);
 
-   QTableView *progTableView = findChild<QTableView *>("progTableView");
+    QTableView *progTableView = findChild<QTableView *>("progTableView");
 
-   int32_t row = int32_t(parser.cycle_index_to_gcode(size_t(local_packet.cycle_index+1)));
-   progTableView->selectRow(row);
-   progTableView->scrollTo(progTableView->currentIndex(), QAbstractItemView::PositionAtCenter);
+    int32_t row = int32_t(parser.cycle_index_to_gcode(size_t(local_packet.cycle_index+1)));
+    progTableView->selectRow(row);
+    progTableView->scrollTo(progTableView->currentIndex(), QAbstractItemView::PositionAtCenter);
 
-   rawStatusLabel->setText(str);
+    rawStatusLabel->setText(str);
+
+    QPushButton *clearButton = findChild<QPushButton *>("clearButton");
+    QPushButton *resetButton = findChild<QPushButton *>("resetButton");
+    QPushButton *pauseButton = findChild<QPushButton *>("pauseButton");
+
+    QGridLayout *gridLayoutConversational0 = findChild<QGridLayout *>("gridLayoutConversational0");
+    QGridLayout *gridLayoutConversational1 = findChild<QGridLayout *>("gridLayoutConversational1");
+
+    if (local_packet.current_run_mode == run_mode_cycle_pause ||
+        local_packet.current_run_mode == run_mode_cycle) {
+
+        clearButton->setEnabled(true);
+        resetButton->setEnabled(true);
+        pauseButton->setEnabled(true);
+
+        QList<QPushButton *> buttons0 = gridLayoutConversational0->findChildren<QPushButton *>();
+        QList<QPushButton *>::iterator i0;
+        for (i0 = buttons0.begin(); i0 != buttons0.end(); i0++) {
+            (*i0)->setDisabled(true);
+        }
+
+        QList<QPushButton *> buttons1 = gridLayoutConversational1->findChildren<QPushButton *>();
+        QList<QPushButton *>::iterator i1;
+        for (i1 = buttons1.begin(); i1 != buttons1.end(); i1++) {
+            (*i1)->setDisabled(true);
+        }
+
+        if (local_packet.current_run_mode == run_mode_cycle_pause) {
+            pauseButton->setText("RESUME");
+        } else {
+            pauseButton->setText("PAUSE");
+        }
+
+    } else {
+        clearButton->setDisabled(true);
+        resetButton->setDisabled(true);
+        pauseButton->setDisabled(true);
+
+        QList<QPushButton *> buttons0 = gridLayoutConversational0->findChildren<QPushButton *>();
+        QList<QPushButton *>::iterator i0;
+        for (i0 = buttons0.begin(); i0 != buttons0.end(); i0++) {
+            (*i0)->setEnabled(true);
+        }
+
+        QList<QPushButton *> buttons1 = gridLayoutConversational1->findChildren<QPushButton *>();
+        QList<QPushButton *>::iterator i1;
+        for (i1 = buttons1.begin(); i1 != buttons1.end(); i1++) {
+            (*i1)->setEnabled(true);
+        }
+    }
 }
 
 static const double settingsValues [3][20] =

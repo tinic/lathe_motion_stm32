@@ -288,8 +288,8 @@ void CommThread::run() {
         }
 
         if (code.size()>0) {
-            std::string cmdCR("CR");
-            send_command(cmdCR);
+            std::string cmdCC("CC");
+            send_command(cmdCC);
             read_response(bad_crc);
             for (auto cmd : code) {
                 qDebug("%s", cmd.c_str());
@@ -297,6 +297,9 @@ void CommThread::run() {
                 std::string response = read_response(bad_crc);
                 qDebug("%s", response.c_str());
             }
+            std::string cmdCR("CR");
+            send_command(cmdCR);
+            read_response(bad_crc);
             code.clear();
         }
 

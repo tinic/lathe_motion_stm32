@@ -88,7 +88,7 @@ QHeaderView {
      </spacer>
     </item>
     <item row="2" column="0">
-     <layout class="QGridLayout" name="gridLayout">
+     <layout class="QGridLayout" name="gridLayoutConversational0">
       <item row="0" column="1">
        <widget class="QPushButton" name="setINButton">
         <property name="sizePolicy">
@@ -576,7 +576,7 @@ QHeaderView {
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton">
+           <widget class="QPushButton" name="pauseButton">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -589,7 +589,7 @@ QHeaderView {
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="pushButton_2">
+           <widget class="QPushButton" name="resetButton">
             <property name="minimumSize">
              <size>
               <width>0</width>
@@ -671,7 +671,7 @@ POSX: +0000.00</string>
      </widget>
     </item>
     <item row="2" column="2">
-     <layout class="QGridLayout" name="gridLayout_2">
+     <layout class="QGridLayout" name="gridLayoutConversational1">
       <item row="0" column="1">
        <widget class="QPushButton" name="xmButton">
         <property name="sizePolicy">
@@ -1439,7 +1439,7 @@ POSX: +0000.00</string>
    </hints>
   </connection>
   <connection>
-   <sender>pushButton</sender>
+   <sender>pauseButton</sender>
    <signal>clicked()</signal>
    <receiver>MainWindow</receiver>
    <slot>progPauseClicked()</slot>
@@ -1471,7 +1471,7 @@ POSX: +0000.00</string>
    </hints>
   </connection>
   <connection>
-   <sender>pushButton_2</sender>
+   <sender>resetButton</sender>
    <signal>pressed()</signal>
    <receiver>MainWindow</receiver>
    <slot>progResetClicked()</slot>
