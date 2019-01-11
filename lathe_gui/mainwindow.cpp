@@ -98,23 +98,29 @@ void MainWindow::update()
            local_packet.cycle_counter,
 
            local_packet.absolute_pos >=0 ? '+' : '-',
-           labs(local_packet.absolute_pos),
+           abs(local_packet.absolute_pos),
            local_packet.absolute_idx >=0 ? '+' : '-',
-           labs(local_packet.absolute_idx),
+           abs(local_packet.absolute_idx),
            local_packet.absolute_cnt >=0 ? '+' : '-',
-           labs(local_packet.absolute_cnt),
+           abs(local_packet.absolute_cnt),
 
            local_packet.current_index_delta,
 
            local_packet.stepper_actual_pos_z >=0 ? '+' : '-',
-           llabs(local_packet.stepper_actual_pos_z),
+           abs(local_packet.stepper_actual_pos_z),
            local_packet.stepper_actual_pos_x >=0 ? '+' : '-',
-           llabs(local_packet.stepper_actual_pos_x),
+           abs(local_packet.stepper_actual_pos_x),
            local_packet.stepper_actual_pos_d >=0 ? '+' : '-',
-           llabs(local_packet.stepper_actual_pos_d),
+           abs(local_packet.stepper_actual_pos_d),
 
            local_packet.cycle_index,
            local_packet.cycle_index_count);
+
+   QTableView *progTableView = findChild<QTableView *>("progTableView");
+
+   int32_t row = int32_t(parser.cycle_index_to_gcode(size_t(local_packet.cycle_index+1)));
+   progTableView->selectRow(row);
+   progTableView->scrollTo(progTableView->currentIndex(), QAbstractItemView::PositionAtCenter);
 
    rawStatusLabel->setText(str);
 }
@@ -253,22 +259,40 @@ void MainWindow::progLoadClicked()
         progTableView->show();
 
         progTableView->setEditTriggers(QAbstractItemView::NoEditTriggers);
-    }
-}
 
-void MainWindow::progRunClicked()
-{
-    commThread.mutex.lock();
-    commThread.code = parser.intermediate_code();
-    commThread.mutex.unlock();
+        int32_t row = int32_t(parser.cycle_index_to_gcode(size_t(1)));
+        progTableView->selectRow(row);
+        progTableView->scrollTo(progTableView->currentIndex(), QAbstractItemView::PositionAtCenter);
+
+        commThread.mutex.lock();
+        commThread.code = parser.intermediate_code();
+        commThread.mutex.unlock();
+    }
 }
 
 void MainWindow::progPauseClicked()
 {
+    commThread.mutex.lock();
+    commThread.cpause = true;
+    commThread.mutex.unlock();
 }
 
 void MainWindow::progClearClicked()
 {
+    QTableView *progTableView = findChild<QTableView *>("progTableView");
+
+    progTableView->model()->removeRows(0,progTableView->model()->rowCount());
+
+    commThread.mutex.lock();
+    commThread.cclear = true;
+    commThread.mutex.unlock();
+}
+
+void MainWindow::progResetClicked()
+{
+    commThread.mutex.lock();
+    commThread.creset = true;
+    commThread.mutex.unlock();
 }
 
 void MainWindow::zeroButtonClicked()

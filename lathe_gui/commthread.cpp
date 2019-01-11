@@ -192,6 +192,9 @@ void CommThread::run() {
     newxfeed = 0;
 
     setfollow = false;
+    cstart = false;
+    cpause = false;
+    creset = false;
 
     bool bad_crc = false;
 
@@ -220,6 +223,21 @@ void CommThread::run() {
                 send_command(cmd);
                 read_response(bad_crc);
             }
+        } else if (cpause) {
+            std::string cmdCS("CP");
+            send_command(cmdCS);
+            read_response(bad_crc);
+            cpause = false;
+        } else if (creset) {
+            std::string cmdCS("CR");
+            send_command(cmdCS);
+            read_response(bad_crc);
+            creset = false;
+        } else if (cclear) {
+            std::string cmdCS("CC");
+            send_command(cmdCS);
+            read_response(bad_crc);
+            cclear = false;
         }
 
         if (setzero) {
@@ -280,9 +298,6 @@ void CommThread::run() {
                 qDebug("%s", response.c_str());
             }
             code.clear();
-            std::string cmdCS("CS");
-            send_command(cmdCS);
-            read_response(bad_crc);
         }
 
         std::string cmd("S");

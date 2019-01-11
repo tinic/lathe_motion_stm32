@@ -15,6 +15,8 @@ public:
     const std::vector<std::string> &intermediate_code() const;
     const std::vector<std::string> &g_code() const;
 
+    size_t cycle_index_to_gcode(size_t gcodei) { return _blockmap[gcodei]; }
+
 private:
     void output_intermediate(
                 double target_x_pos,
@@ -44,6 +46,10 @@ private:
        int32_t prev_x_div;
        int32_t prev_d_mul;
        int32_t prev_d_div;
+
+       double prev_target_x_pos;
+       double prev_target_y_pos;
+       double prev_target_z_pos;
 
 };
 

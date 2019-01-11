@@ -576,19 +576,6 @@ QHeaderView {
            </widget>
           </item>
           <item>
-           <widget class="QPushButton" name="runButton">
-            <property name="minimumSize">
-             <size>
-              <width>0</width>
-              <height>48</height>
-             </size>
-            </property>
-            <property name="text">
-             <string>SEND</string>
-            </property>
-           </widget>
-          </item>
-          <item>
            <widget class="QPushButton" name="pushButton">
             <property name="minimumSize">
              <size>
@@ -598,6 +585,19 @@ QHeaderView {
             </property>
             <property name="text">
              <string>PAUSE</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QPushButton" name="pushButton_2">
+            <property name="minimumSize">
+             <size>
+              <width>0</width>
+              <height>48</height>
+             </size>
+            </property>
+            <property name="text">
+             <string>RESET</string>
             </property>
            </widget>
           </item>
@@ -997,8 +997,8 @@ POSX: +0000.00</string>
    <slot>settings04ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>338</x>
-     <y>493</y>
+     <x>442</x>
+     <y>494</y>
     </hint>
     <hint type="destinationlabel">
      <x>601</x>
@@ -1061,8 +1061,8 @@ POSX: +0000.00</string>
    <slot>settings08ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>338</x>
-     <y>544</y>
+     <x>442</x>
+     <y>545</y>
     </hint>
     <hint type="destinationlabel">
      <x>655</x>
@@ -1125,8 +1125,8 @@ POSX: +0000.00</string>
    <slot>settings12ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>338</x>
-     <y>596</y>
+     <x>442</x>
+     <y>593</y>
     </hint>
     <hint type="destinationlabel">
      <x>715</x>
@@ -1142,7 +1142,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>94</x>
-     <y>648</y>
+     <y>644</y>
     </hint>
     <hint type="destinationlabel">
      <x>731</x>
@@ -1158,7 +1158,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>175</x>
-     <y>648</y>
+     <y>644</y>
     </hint>
     <hint type="destinationlabel">
      <x>744</x>
@@ -1174,7 +1174,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>257</x>
-     <y>648</y>
+     <y>644</y>
     </hint>
     <hint type="destinationlabel">
      <x>758</x>
@@ -1189,8 +1189,8 @@ POSX: +0000.00</string>
    <slot>settings16ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>338</x>
-     <y>648</y>
+     <x>442</x>
+     <y>644</y>
     </hint>
     <hint type="destinationlabel">
      <x>776</x>
@@ -1205,8 +1205,8 @@ POSX: +0000.00</string>
    <slot>settings17ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>94</x>
-     <y>700</y>
+     <x>111</x>
+     <y>695</y>
     </hint>
     <hint type="destinationlabel">
      <x>789</x>
@@ -1221,8 +1221,8 @@ POSX: +0000.00</string>
    <slot>settings18ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>175</x>
-     <y>700</y>
+     <x>224</x>
+     <y>695</y>
     </hint>
     <hint type="destinationlabel">
      <x>801</x>
@@ -1237,8 +1237,8 @@ POSX: +0000.00</string>
    <slot>settings19ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>257</x>
-     <y>700</y>
+     <x>333</x>
+     <y>695</y>
     </hint>
     <hint type="destinationlabel">
      <x>812</x>
@@ -1253,8 +1253,8 @@ POSX: +0000.00</string>
    <slot>settings20ButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>338</x>
-     <y>700</y>
+     <x>442</x>
+     <y>695</y>
     </hint>
     <hint type="destinationlabel">
      <x>608</x>
@@ -1317,8 +1317,8 @@ POSX: +0000.00</string>
    <slot>zeroButtonClicked()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>716</x>
-     <y>700</y>
+     <x>781</x>
+     <y>695</y>
     </hint>
     <hint type="destinationlabel">
      <x>561</x>
@@ -1333,8 +1333,8 @@ POSX: +0000.00</string>
    <slot>zButtonToggled(bool)</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>716</x>
-     <y>622</y>
+     <x>781</x>
+     <y>616</y>
     </hint>
     <hint type="destinationlabel">
      <x>551</x>
@@ -1350,7 +1350,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>716</x>
-     <y>467</y>
+     <y>456</y>
     </hint>
     <hint type="destinationlabel">
      <x>550</x>
@@ -1366,7 +1366,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>1348</x>
-     <y>467</y>
+     <y>456</y>
     </hint>
     <hint type="destinationlabel">
      <x>1051</x>
@@ -1382,7 +1382,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>1348</x>
-     <y>622</y>
+     <y>616</y>
     </hint>
     <hint type="destinationlabel">
      <x>1008</x>
@@ -1398,7 +1398,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>1032</x>
-     <y>545</y>
+     <y>537</y>
     </hint>
     <hint type="destinationlabel">
      <x>548</x>
@@ -1414,7 +1414,7 @@ POSX: +0000.00</string>
    <hints>
     <hint type="sourcelabel">
      <x>1348</x>
-     <y>700</y>
+     <y>695</y>
     </hint>
     <hint type="destinationlabel">
      <x>899</x>
@@ -1439,30 +1439,14 @@ POSX: +0000.00</string>
    </hints>
   </connection>
   <connection>
-   <sender>runButton</sender>
-   <signal>clicked()</signal>
-   <receiver>MainWindow</receiver>
-   <slot>progRunClicked()</slot>
-   <hints>
-    <hint type="sourcelabel">
-     <x>518</x>
-     <y>166</y>
-    </hint>
-    <hint type="destinationlabel">
-     <x>1024</x>
-     <y>61</y>
-    </hint>
-   </hints>
-  </connection>
-  <connection>
    <sender>pushButton</sender>
    <signal>clicked()</signal>
    <receiver>MainWindow</receiver>
    <slot>progPauseClicked()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>477</x>
-     <y>200</y>
+     <x>638</x>
+     <y>195</y>
     </hint>
     <hint type="destinationlabel">
      <x>1127</x>
@@ -1477,12 +1461,28 @@ POSX: +0000.00</string>
    <slot>progClearClicked()</slot>
    <hints>
     <hint type="sourcelabel">
-     <x>509</x>
-     <y>264</y>
+     <x>638</x>
+     <y>319</y>
     </hint>
     <hint type="destinationlabel">
      <x>1222</x>
      <y>58</y>
+    </hint>
+   </hints>
+  </connection>
+  <connection>
+   <sender>pushButton_2</sender>
+   <signal>pressed()</signal>
+   <receiver>MainWindow</receiver>
+   <slot>progResetClicked()</slot>
+   <hints>
+    <hint type="sourcelabel">
+     <x>535</x>
+     <y>226</y>
+    </hint>
+    <hint type="destinationlabel">
+     <x>1355</x>
+     <y>40</y>
     </hint>
    </hints>
   </connection>
@@ -1520,8 +1520,8 @@ POSX: +0000.00</string>
   <slot>stopButtonToggled(bool)</slot>
   <slot>idleButtonToggled(bool)</slot>
   <slot>progLoadClicked()</slot>
-  <slot>progRunClicked()</slot>
   <slot>progPauseClicked()</slot>
   <slot>progClearClicked()</slot>
+  <slot>progResetClicked()</slot>
  </slots>
 </ui>

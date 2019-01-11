@@ -45,6 +45,11 @@ public:
     bool idle;
     bool stop;
 
+    bool cpause;
+    bool cstart;
+    bool creset;
+    bool cclear;
+
 #ifdef LOCAL_SOCKET
     QTcpSocket *socket;
 #else  // #ifdef LOCAL_SOCKET

@@ -861,12 +861,6 @@ void GCodeParser::output_intermediate(
             double feed_rate,
             bool wait_for_index) {
 
-  qDebug("0 %g %g %g %g", target_x_pos, target_y_pos, target_z_pos, feed_rate);
-
-  static double prev_target_x_pos = 0;
-  static double prev_target_y_pos = 0;
-  static double prev_target_z_pos = 0;
-
   double target_feed_x = 0;
   double target_feed_y = 0;
   double target_feed_z = 0;
@@ -911,8 +905,6 @@ void GCodeParser::output_intermediate(
       target_feed_y = 0;
       target_feed_z = feed_rate * sign_z;
   }
-
-  qDebug("1 %g %g %g %g", target_feed_x, target_feed_z, target_feed_y, double(axis_mode));
 
   int32_t target_pos = 0;
   switch(axis_mode) {
@@ -996,6 +988,8 @@ void GCodeParser::output_intermediate(
 
   std::stringstream ss;
 
+  qDebug("IDX:%04d TA:%02d %g %08d %g %08d %g %08d", _intcode.size(), axis_mode, target_feed_z, int32_t(mm_to_step_z(target_z_pos)), target_feed_x, int32_t(mm_to_step_x(target_x_pos)), target_feed_y, int32_t(mm_to_step_y(target_y_pos)));
+
   ss << 'C';
 
   ss << ((axis_mode == 0) ? 'X' : ((axis_mode == 1) ? 'D' : 'Z'));
@@ -1013,7 +1007,7 @@ void GCodeParser::output_intermediate(
 
   if ((z_mul && dz != 0.0)) {
       ss << std::setw(8);
-      ss << int32_t(mm_to_step_x(target_z_pos));
+      ss << int32_t(mm_to_step_z(target_z_pos));
       ss << std::setw(8);
       ss << z_mul;
       ss << std::setw(8);
@@ -1031,7 +1025,7 @@ void GCodeParser::output_intermediate(
 
   if ((d_mul && dy != 0.0)) {
       ss << std::setw(8);
-      ss << int32_t(mm_to_step_x(target_y_pos));
+      ss << int32_t(mm_to_step_y(target_y_pos));
       ss << std::setw(8);
       ss << d_mul;
       ss << std::setw(8);
@@ -1170,6 +1164,10 @@ void GCodeParser::loadAndParse(std::ifstream &t) {
   prev_x_div = 0;
   prev_d_mul = 0;
   prev_d_div = 0;
+
+  prev_target_x_pos = 0;
+  prev_target_y_pos = 0;
+  prev_target_z_pos = 0;
 
   current_bytes = 0;
 

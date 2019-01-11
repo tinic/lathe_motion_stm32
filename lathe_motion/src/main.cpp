@@ -251,11 +251,11 @@ static uint32_t parse_hex04(const uint8_t *buf) {
 	uint32_t value = 0;
 	for (uint32_t c=0; c<4; c++) {
 		if (buf[c] >= 0x30 && buf[c] <= 0x39) {
-			value |= (buf[c] - 0x30       ) << ((7-c)*4);
+			value |= (buf[c] - 0x30       ) << ((3-c)*4);
 		} else if (buf[c] >= 0x41 && buf[c] <= 0x46) {
-			value |= (buf[c] - 0x41 + 0x0A) << ((7-c)*4);
+			value |= (buf[c] - 0x41 + 0x0A) << ((3-c)*4);
 		} else if (buf[c] >= 0x61 && buf[c] <= 0x66) {
-			value |= (buf[c] - 0x61 + 0x0A) << ((7-c)*4);
+			value |= (buf[c] - 0x61 + 0x0A) << ((3-c)*4);
 		}
 	}
 	return value;
@@ -265,11 +265,11 @@ static uint32_t parse_hex02(const uint8_t *buf) {
 	uint32_t value = 0;
 	for (uint32_t c=0; c<2; c++) {
 		if (buf[c] >= 0x30 && buf[c] <= 0x39) {
-			value |= (buf[c] - 0x30       ) << ((7-c)*4);
+			value |= (buf[c] - 0x30       ) << ((1-c)*4);
 		} else if (buf[c] >= 0x41 && buf[c] <= 0x46) {
-			value |= (buf[c] - 0x41 + 0x0A) << ((7-c)*4);
+			value |= (buf[c] - 0x41 + 0x0A) << ((1-c)*4);
 		} else if (buf[c] >= 0x61 && buf[c] <= 0x66) {
-			value |= (buf[c] - 0x61 + 0x0A) << ((7-c)*4);
+			value |= (buf[c] - 0x61 + 0x0A) << ((1-c)*4);
 		}
 	}
 	return value;
@@ -623,6 +623,7 @@ void SysTick_Handler(void)
 			stepper_target_axis,
 			
 			current_run_mode
+			
 		);
 	}
 #endif  // #ifdef STM32
@@ -820,6 +821,19 @@ static struct cycle_buffer {
 				entry.stepper_div_d = 0;
 			}
 		}
+
+		printf("POS:%08d IDX:%04d TA:%02d TP:%08d SZ:%08d SX:%08d SD:%08d DZ:%08d DX:%08d DD:%08d\n",
+			buf_pos,
+			buf_index,
+			current().target_axs,
+			current().target_pos,
+			current().stepper_mul_z,
+			current().stepper_mul_x,
+			current().stepper_mul_d,
+			current().stepper_div_z,
+			current().stepper_div_x,
+			current().stepper_div_d
+		);
 		
 		buf_index ++;
 	}
@@ -827,11 +841,11 @@ static struct cycle_buffer {
 	void push(const cycle_entry &push_entry) {
 		uint8_t flags0 = push_entry.target_axs;
 		uint8_t flags1 = 0;
-
+		
 		// always changes, so do not optimize change
-		if ((abs(push_entry.target_pos) >> 25) != 0) {
+		if ((abs(push_entry.target_pos) >> 23) != 0) {
 			flags1 |= T_32_FLG;
-		} else if ((abs(push_entry.target_pos) >> 17) != 0) {
+		} else if ((abs(push_entry.target_pos) >> 15) != 0) {
 			flags1 |= T_24_FLG;
 		} else {
 			flags1 |= T_16_FLG;
@@ -841,9 +855,9 @@ static struct cycle_buffer {
 			push_entry.stepper_div_z != entry.stepper_div_z ) {
 			flags0 |= Z_MULDIV_CHG;
 			if (push_entry.stepper_mul_z || push_entry.stepper_div_z) {
-				if (((abs(push_entry.stepper_mul_z) | abs(push_entry.stepper_div_z)) >> 25) != 0) {
+				if (((abs(push_entry.stepper_mul_z) | abs(push_entry.stepper_div_z)) >> 23) != 0) {
 					flags1 |= Z_MULDIV_32_FLG;
-				} else if (((abs(push_entry.stepper_mul_z) | abs(push_entry.stepper_div_z)) >> 17) != 0) {
+				} else if (((abs(push_entry.stepper_mul_z) | abs(push_entry.stepper_div_z)) >> 15) != 0) {
 					flags1 |= Z_MULDIV_24_FLG;
 				} else {
 					flags1 |= Z_MULDIV_16_FLG;
@@ -855,9 +869,9 @@ static struct cycle_buffer {
 			push_entry.stepper_div_x != entry.stepper_div_x ) {
 			flags0 |= X_MULDIV_CHG;
 			if (push_entry.stepper_mul_x || push_entry.stepper_div_x) {
-				if (((abs(push_entry.stepper_mul_x) | abs(push_entry.stepper_div_x)) >> 25) != 0) {
+				if (((abs(push_entry.stepper_mul_x) | abs(push_entry.stepper_div_x)) >> 23) != 0) {
 					flags1 |= X_MULDIV_32_FLG;
-				} else if (((abs(push_entry.stepper_mul_x) | abs(push_entry.stepper_div_x)) >> 17) != 0) {
+				} else if (((abs(push_entry.stepper_mul_x) | abs(push_entry.stepper_div_x)) >> 15) != 0) {
 					flags1 |= X_MULDIV_24_FLG;
 				} else {
 					flags1 |= X_MULDIV_16_FLG;
@@ -869,12 +883,12 @@ static struct cycle_buffer {
 			push_entry.stepper_div_d != entry.stepper_div_d ) {
 			flags0 |= D_MULDIV_CHG;
 			if (push_entry.stepper_mul_d || push_entry.stepper_div_d) {
-				if (((abs(push_entry.stepper_mul_d) | abs(push_entry.stepper_div_d)) >> 25) != 0) {
-					flags1 |= X_MULDIV_32_FLG;
-				} else if (((abs(push_entry.stepper_mul_d) | abs(push_entry.stepper_div_d)) >> 17) != 0) {
-					flags1 |= X_MULDIV_24_FLG;
+				if (((abs(push_entry.stepper_mul_d) | abs(push_entry.stepper_div_d)) >> 23) != 0) {
+					flags1 |= D_MULDIV_32_FLG;
+				} else if (((abs(push_entry.stepper_mul_d) | abs(push_entry.stepper_div_d)) >> 15) != 0) {
+					flags1 |= D_MULDIV_24_FLG;
 				} else {
-					flags1 |= X_MULDIV_16_FLG;
+					flags1 |= D_MULDIV_16_FLG;
 				}
 			}
 		}
@@ -926,6 +940,19 @@ static struct cycle_buffer {
 		} 
 		
 		entry = push_entry;
+
+		printf("POS:%08d IDX:%04d TA:%02d TP:%08d SZ:%08d SX:%08d SD:%08d DZ:%08d DX:%08d DD:%08d\n",
+			buf_len,
+			buf_index_length,
+			entry.target_axs,
+			entry.target_pos,
+			entry.stepper_mul_z,
+			entry.stepper_mul_x,
+			entry.stepper_mul_d,
+			entry.stepper_div_z,
+			entry.stepper_div_x,
+			entry.stepper_div_d
+		);
 		
 		buf_index_length++;
 	}
@@ -933,25 +960,25 @@ static struct cycle_buffer {
 private:
 
 	int32_t read_int32() {
-		int32_t res = int32_t((buf[buf_pos+0] << 24) | 
-							  (buf[buf_pos+1] << 16) | 
-							  (buf[buf_pos+2] <<  8) | 
-							  (buf[buf_pos+3] <<  0)); 
+		int32_t res = (int32_t(int8_t(buf[buf_pos+0])) << 24)| 
+					  (int32_t(       buf[buf_pos+1] ) << 16)| 
+					  (int32_t(       buf[buf_pos+2] ) <<  8)| 
+					  (int32_t(       buf[buf_pos+3] ) <<  0); 
 		buf_pos += 4;
 		return res;
 	}
 
 	int32_t read_int24() {
-		int32_t res = int32_t((int32_t(int8_t(buf[buf_pos+0])) << 16) | 
-							  (               buf[buf_pos+1]   <<  8) | 
-							  (               buf[buf_pos+2]   <<  0)); 
+		int32_t res = (int32_t(int8_t(buf[buf_pos+0])) << 16)| 
+					  (int32_t(       buf[buf_pos+1] ) <<  8)| 
+					  (int32_t(       buf[buf_pos+2] ) <<  0); 
 		buf_pos += 3;
 		return res;
 	}
 
 	int32_t read_int16() {
-		int32_t res = int32_t(int16_t((buf[buf_pos+0] <<  8) | 
-							          (buf[buf_pos+1] <<  0))); 
+		int32_t res = (int32_t(int8_t(buf[buf_pos+0])) <<  8) | 
+					  (int32_t(       buf[buf_pos+1] ) <<  0); 
 		buf_pos += 2;
 		return res;
 	}
@@ -1016,10 +1043,14 @@ static inline void reload_cycle() {
 	stepper_follow_mul_z = e.stepper_mul_z;
 	stepper_follow_mul_x = e.stepper_mul_x;
 	stepper_follow_mul_d = e.stepper_mul_d;
+	
+	printf("!! %d %d %d\n", stepper_follow_mul_z, stepper_follow_mul_x, stepper_follow_mul_d);
 
 	stepper_follow_div_z = e.stepper_div_z;
 	stepper_follow_div_x = e.stepper_div_x;
 	stepper_follow_div_d = e.stepper_div_d;
+
+	printf("** %d %d %d\n", stepper_follow_div_z, stepper_follow_div_x, stepper_follow_div_d);
 
 	stepper_end_pos_z = 0;
 	stepper_end_pos_x = 0;
@@ -1130,7 +1161,7 @@ void TIM2_IRQHandler(void)
 						bool do_next_cycle_step = false;
 						switch(stepper_target_axis) {
 							case 0: {
-								if (stepper_follow_mul_z <= 0) {
+								if (stepper_follow_mul_z >= 0) {
 									if (stepper_actual_pos_z >= stepper_end_pos_z) {
 										do_next_cycle_step = true;
 									}   
@@ -1141,7 +1172,7 @@ void TIM2_IRQHandler(void)
 								}
 							} break;
 							case 1: {
-								if (stepper_follow_mul_x <= 0) {
+								if (stepper_follow_mul_x >= 0) {
 									if (stepper_actual_pos_x >= stepper_end_pos_x) {
 										do_next_cycle_step = true;
 									}
@@ -1152,7 +1183,7 @@ void TIM2_IRQHandler(void)
 								}
 							} break;
 							case 2: {
-								if (stepper_follow_mul_d <= 0) {
+								if (stepper_follow_mul_d >= 0) {
 									if (stepper_actual_pos_d >= stepper_end_pos_d) {
 										do_next_cycle_step = true;
 									}
@@ -1585,9 +1616,8 @@ static void parse(void) {
 
                             if (buf[pos] != 'X' && 
                                 buf[pos] != 'Z' &&
-                                buf[pos] != 'C' &&
                                 buf[pos] != 'D' &&
-                                buf[pos] != 'S' && 
+                                buf[pos] != 'C' && 
                                 buf[pos] != 'R' && 
                                 buf[pos] != 'P') {
                                 ok_to_run = false;
@@ -1595,7 +1625,8 @@ static void parse(void) {
                                 break;
                             }
 
-                            if (buf[pos] == 'S') {
+							// reset
+                            if (buf[pos] == 'R') {
                             	cycle_buffer.reset();
                                 if (cycle_buffer.empty() ||
                                     cycle_buffer.atend()) {
@@ -1604,38 +1635,34 @@ static void parse(void) {
                                 }
                                 reload_cycle();
                                 set_zero_pos();
-                                set_current_run_mode(run_mode_cycle);
+								set_current_run_mode(run_mode_cycle_pause);
                                 send_ok_response();
                                 break;
                             }
 
-                            if (buf[pos] == 'C') {
+							// pause/resume
+                            if (buf[pos] == 'P') {
                             	if (current_run_mode == run_mode_cycle_pause) {
 	                                set_current_run_mode(run_mode_cycle);
-	                            }
-                                send_ok_response();
-                                break;
-                            }
-
-                            if (buf[pos] == 'P') {
-                            	if (current_run_mode == run_mode_cycle) {
+	                            } else if (current_run_mode == run_mode_cycle) {
 									set_current_run_mode(run_mode_cycle_pause);
 								}
                                 send_ok_response();
                                 break;
                             }
 
-                            set_current_run_mode(run_mode_none);
-
-                            if (buf[pos] == 'R') {
+							// clear
+                            if (buf[pos] == 'C') {
                             	cycle_buffer.clear();
                                 prev_target_z = 0;
                                 prev_target_x = 0;
                                 prev_target_d = 0;
+                                set_current_run_mode(run_mode_none);
                                 send_ok_response();
                                 break;
                             }
 
+							set_current_run_mode(run_mode_cycle_pause);
 
                             cycle_buffer::cycle_entry entry;
 
@@ -1655,7 +1682,6 @@ static void parse(void) {
 
                             uint8_t flags = uint8_t(parse_hex02((const uint8_t *)&buf[pos])); pos += 2;
 
-
 							int32_t target_pos_z = 0;                            
 							int32_t target_pos_x = 0;                            
 							int32_t target_pos_d = 0;         
@@ -1663,9 +1689,10 @@ static void parse(void) {
 							#define SET_Z_FLAG 0x01
 							#define SET_X_FLAG 0x02
 							#define SET_D_FLAG 0x04
+							
 							#define WAIT_FLAG  0x10
 
-                            if (flags & SET_Z_FLAG) {
+                            if ((flags & SET_Z_FLAG) != 0) {
 								buf_check_size += 24;
 								if (buf_pos < buf_check_size) {
 									send_invalid_response();
@@ -1675,11 +1702,12 @@ static void parse(void) {
 								entry.stepper_mul_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
 								entry.stepper_div_z = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
                             } else {
+                            	target_pos_z = prev_target_z;
 								entry.stepper_mul_z = 0;
 								entry.stepper_div_z = 1;
                             }
 
-                            if (flags & SET_X_FLAG) {
+                            if ((flags & SET_X_FLAG) != 0) {
 								buf_check_size += 24;
 								if (buf_pos < buf_check_size) {
 									send_invalid_response();
@@ -1689,11 +1717,12 @@ static void parse(void) {
 								entry.stepper_mul_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
 								entry.stepper_div_x = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
 							} else {
+                            	target_pos_x = prev_target_x;
 								entry.stepper_mul_x = 0;
 								entry.stepper_div_x = 1;
 							}
 
-                            if (flags & SET_D_FLAG) {
+                            if ((flags & SET_D_FLAG) != 0) {
 								buf_check_size += 24;
 								if (buf_pos < buf_check_size) {
 									send_invalid_response();
@@ -1703,15 +1732,12 @@ static void parse(void) {
 								entry.stepper_mul_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
 								entry.stepper_div_d = int32_t(parse_hex08((const uint8_t *)&buf[pos])); pos += 8;
 							} else {
+                            	target_pos_d = prev_target_d;
 								entry.stepper_mul_d = 0;
 								entry.stepper_div_d = 1;
 							}
 
                             entry.wait_for_index_zero = (flags & WAIT_FLAG) ? 1 : 0;
-
-                            entry.stepper_mul_z = -entry.stepper_mul_z;
-                            entry.stepper_mul_x = -entry.stepper_mul_x;
-                            entry.stepper_mul_d = -entry.stepper_mul_d;
 
                             if (entry.stepper_div_z <= 0 ||
                                 entry.stepper_div_x <= 0 ||
@@ -1727,88 +1753,49 @@ static void parse(void) {
                             switch(entry.target_axs) {
                                 case 0: {
                                 	entry.target_pos = target_pos_z;
-                                    if (entry.stepper_mul_z < 0 && entry.target_pos <= prev_target_z) {
+                                    if (entry.stepper_mul_z > 0 && entry.target_pos <= prev_target_z) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_z > 0 && entry.target_pos >= prev_target_z) {
+                                    if (entry.stepper_mul_z < 0 && entry.target_pos >= prev_target_z) {
                                         ok_to_run = false;
                                     }
                                     if (entry.stepper_mul_z == 0 && entry.target_pos != prev_target_z) {
                                         ok_to_run = false;
                                     }
-									int32_t delta = prev_target_z - target_pos_z;
-                                    if (entry.stepper_mul_x) {
-										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_x);
-										int32_t v = entry.stepper_div_x;
-										int32_t calc_target_x = prev_target_x + divls(int32_t(u>>32),uint32_t(u), v); 
-										printf("%d %d\n", target_pos_x, calc_target_x);
-                                    }
-                                    if (entry.stepper_mul_d) {
-										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_d);
-										int32_t v = entry.stepper_div_d;
-										int32_t calc_target_d = prev_target_d + divls(int32_t(u>>32),uint32_t(u), v); 
-										printf("%d %d\n", target_pos_d, calc_target_d);
-                                    }
                                 } break;
                                 case 1: {
                                 	entry.target_pos = target_pos_x;
-                                    if (entry.stepper_mul_x < 0 && entry.target_pos <= prev_target_x) {
+                                    if (entry.stepper_mul_x > 0 && entry.target_pos <= prev_target_x) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_x > 0 && entry.target_pos >= prev_target_x) {
+                                    if (entry.stepper_mul_x < 0 && entry.target_pos >= prev_target_x) {
                                         ok_to_run = false;
                                     }
                                     if (entry.stepper_mul_x == 0 && entry.target_pos != prev_target_x) {
                                         ok_to_run = false;
                                     }
-									int32_t delta = prev_target_x - target_pos_x;
-                                    if (entry.stepper_mul_z) {
-										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_z);
-										int32_t v = entry.stepper_div_z;
-										int32_t calc_target_z = prev_target_z + divls(int32_t(u>>32),uint32_t(u), v); 
-										printf("%d %d\n", target_pos_z, calc_target_z);
-                                    }
-                                    if (entry.stepper_mul_d) {
-										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_d);
-										int32_t v = entry.stepper_div_d;
-										int32_t calc_target_d = prev_target_d + divls(int32_t(u>>32),uint32_t(u), v); 
-										printf("%d %d\n", target_pos_d, calc_target_d);
-                                    }
                                 } break;
                                 case 2: {
                                 	entry.target_pos = target_pos_d;
-                                    if (entry.stepper_mul_d < 0 && entry.target_pos <= prev_target_d) {
+                                    if (entry.stepper_mul_d > 0 && entry.target_pos <= prev_target_d) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_d > 0 && entry.target_pos >= prev_target_d) {
+                                    if (entry.stepper_mul_d < 0 && entry.target_pos >= prev_target_d) {
                                         ok_to_run = false;
                                     }
                                     if (entry.stepper_mul_d == 0 && entry.target_pos != prev_target_d) {
                                         ok_to_run = false;
                                     }
-									int32_t delta = prev_target_d - target_pos_d;
-                                    if (entry.stepper_mul_z) {
-										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_z);
-										int32_t v = entry.stepper_div_z;
-										int32_t calc_target_z = prev_target_z + divls(int32_t(u>>32),uint32_t(u), v); 
-										printf("%d %d\n", target_pos_z, calc_target_z);
-                                    }
-                                    if (entry.stepper_mul_x) {
-										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_x);
-										int32_t v = entry.stepper_div_x;
-										int32_t calc_target_x = prev_target_x + divls(int32_t(u>>32),uint32_t(u), v); 
-										printf("%d %d\n", target_pos_x, calc_target_x);
-                                    }
                                 } break;
                             }
-
-                            if (flags & SET_Z_FLAG) {
+                            
+                            if ((flags & SET_Z_FLAG) != 0) {
                             	prev_target_z = target_pos_z;
                             }
-                            if (flags & SET_X_FLAG) {
+                            if ((flags & SET_X_FLAG) != 0) {
                             	prev_target_x = target_pos_x;
                             }
-                            if (flags & SET_D_FLAG) {
+                            if ((flags & SET_D_FLAG) != 0) {
                             	prev_target_d = target_pos_d;
                             }
                             
