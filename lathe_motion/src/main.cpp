@@ -763,11 +763,11 @@ static struct cycle_buffer {
 		entry.target_axs = flags0 & TARGET_AXS_MASK;
 		entry.wait_for_index_zero = flags0 & WAIT_FOR_ZERO;
 
-		if ((flags1 & T_32_FLG) == T_32_FLG) {
+		if ((flags1 & T_MSK) == T_32_FLG) {
 			entry.target_pos = read_int32();
-		} else if ((flags1 & T_32_FLG) == T_24_FLG) {
+		} else if ((flags1 & T_MSK) == T_24_FLG) {
 			entry.target_pos = read_int24();
-		} else if ((flags1 & T_32_FLG) == T_16_FLG) {
+		} else if ((flags1 & T_MSK) == T_16_FLG) {
 			entry.target_pos = read_int16();
 		} else {
 			entry.target_pos = 0;
