@@ -1736,6 +1736,19 @@ static void parse(void) {
                                     if (entry.stepper_mul_z == 0 && entry.target_pos != prev_target_z) {
                                         ok_to_run = false;
                                     }
+									int32_t delta = prev_target_z - target_pos_z;
+                                    if (entry.stepper_mul_x) {
+										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_x);
+										int32_t v = entry.stepper_div_x;
+										int32_t calc_target_x = prev_target_x + divls(int32_t(u>>32),uint32_t(u), v); 
+										printf("%d %d\n", target_pos_x, calc_target_x);
+                                    }
+                                    if (entry.stepper_mul_d) {
+										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_d);
+										int32_t v = entry.stepper_div_d;
+										int32_t calc_target_d = prev_target_d + divls(int32_t(u>>32),uint32_t(u), v); 
+										printf("%d %d\n", target_pos_d, calc_target_d);
+                                    }
                                 } break;
                                 case 1: {
                                 	entry.target_pos = target_pos_x;
@@ -1748,6 +1761,19 @@ static void parse(void) {
                                     if (entry.stepper_mul_x == 0 && entry.target_pos != prev_target_x) {
                                         ok_to_run = false;
                                     }
+									int32_t delta = prev_target_x - target_pos_x;
+                                    if (entry.stepper_mul_z) {
+										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_z);
+										int32_t v = entry.stepper_div_z;
+										int32_t calc_target_z = prev_target_z + divls(int32_t(u>>32),uint32_t(u), v); 
+										printf("%d %d\n", target_pos_z, calc_target_z);
+                                    }
+                                    if (entry.stepper_mul_d) {
+										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_d);
+										int32_t v = entry.stepper_div_d;
+										int32_t calc_target_d = prev_target_d + divls(int32_t(u>>32),uint32_t(u), v); 
+										printf("%d %d\n", target_pos_d, calc_target_d);
+                                    }
                                 } break;
                                 case 2: {
                                 	entry.target_pos = target_pos_d;
@@ -1759,6 +1785,19 @@ static void parse(void) {
                                     }
                                     if (entry.stepper_mul_d == 0 && entry.target_pos != prev_target_d) {
                                         ok_to_run = false;
+                                    }
+									int32_t delta = prev_target_d - target_pos_d;
+                                    if (entry.stepper_mul_z) {
+										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_z);
+										int32_t v = entry.stepper_div_z;
+										int32_t calc_target_z = prev_target_z + divls(int32_t(u>>32),uint32_t(u), v); 
+										printf("%d %d\n", target_pos_z, calc_target_z);
+                                    }
+                                    if (entry.stepper_mul_x) {
+										int64_t u = int64_t(delta) * int64_t(entry.stepper_mul_x);
+										int32_t v = entry.stepper_div_x;
+										int32_t calc_target_x = prev_target_x + divls(int32_t(u>>32),uint32_t(u), v); 
+										printf("%d %d\n", target_pos_x, calc_target_x);
                                     }
                                 } break;
                             }
