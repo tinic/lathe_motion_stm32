@@ -822,6 +822,7 @@ static struct cycle_buffer {
 			}
 		}
 
+#ifndef STM32
 		printf("POS:%08d IDX:%04d TA:%02d TP:%08d SZ:%08d SX:%08d SD:%08d DZ:%08d DX:%08d DD:%08d\n",
 			buf_pos,
 			buf_index,
@@ -834,6 +835,7 @@ static struct cycle_buffer {
 			current().stepper_div_x,
 			current().stepper_div_d
 		);
+#endif  // #ifndef STM32
 		
 		buf_index ++;
 	}
@@ -941,19 +943,6 @@ static struct cycle_buffer {
 		
 		entry = push_entry;
 
-		printf("POS:%08d IDX:%04d TA:%02d TP:%08d SZ:%08d SX:%08d SD:%08d DZ:%08d DX:%08d DD:%08d\n",
-			buf_len,
-			buf_index_length,
-			entry.target_axs,
-			entry.target_pos,
-			entry.stepper_mul_z,
-			entry.stepper_mul_x,
-			entry.stepper_mul_d,
-			entry.stepper_div_z,
-			entry.stepper_div_x,
-			entry.stepper_div_d
-		);
-		
 		buf_index_length++;
 	}
 	
@@ -1044,13 +1033,9 @@ static inline void reload_cycle() {
 	stepper_follow_mul_x = e.stepper_mul_x;
 	stepper_follow_mul_d = e.stepper_mul_d;
 	
-	printf("!! %d %d %d\n", stepper_follow_mul_z, stepper_follow_mul_x, stepper_follow_mul_d);
-
 	stepper_follow_div_z = e.stepper_div_z;
 	stepper_follow_div_x = e.stepper_div_x;
 	stepper_follow_div_d = e.stepper_div_d;
-
-	printf("** %d %d %d\n", stepper_follow_div_z, stepper_follow_div_x, stepper_follow_div_d);
 
 	stepper_end_pos_z = 0;
 	stepper_end_pos_x = 0;
