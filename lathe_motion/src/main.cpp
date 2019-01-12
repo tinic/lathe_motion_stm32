@@ -575,11 +575,16 @@ static struct cycle_buffer {
 		uint8_t target_axs;
 		uint8_t wait_for_index_zero;
 		uint16_t dummy;
-		int32_t target_pos;
+
+		int32_t target_pos_z;
 		int32_t stepper_mul_z;
 		int32_t stepper_div_z;
+
+		int32_t target_pos_x;
 		int32_t stepper_mul_x;
 		int32_t stepper_div_x;
+
+		int32_t target_pos_d;
 		int32_t stepper_mul_d;
 		int32_t stepper_div_d;
 	};
@@ -657,14 +662,69 @@ static struct cycle_buffer {
 		entry.target_axs = flags0 & TARGET_AXS_MASK;
 		entry.wait_for_index_zero = flags0 & WAIT_FOR_ZERO;
 
-		if ((flags1 & T_MSK) == T_32_FLG) {
-			entry.target_pos = read_int32();
-		} else if ((flags1 & T_MSK) == T_24_FLG) {
-			entry.target_pos = read_int24();
-		} else if ((flags1 & T_MSK) == T_16_FLG) {
-			entry.target_pos = read_int16();
-		} else {
-			entry.target_pos = 0;
+		switch(entry.target_axs) {
+			case 0: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					entry.target_pos_z = read_int32();
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					entry.target_pos_z = read_int24();
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					entry.target_pos_z = read_int16();
+				} else {
+					entry.target_pos_z = 0;
+				}
+				entry.target_pos_x = 0;
+				entry.target_pos_d = 0;
+				break;
+			}
+			case 1: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					entry.target_pos_x = read_int32();
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					entry.target_pos_x = read_int24();
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					entry.target_pos_x = read_int16();
+				} else {
+					entry.target_pos_x = 0;
+				}
+				entry.target_pos_z = 0;
+				entry.target_pos_d = 0;
+				break;
+			}
+			case 2: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					entry.target_pos_d = read_int32();
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					entry.target_pos_d = read_int24();
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					entry.target_pos_d = read_int16();
+				} else {
+					entry.target_pos_d = 0;
+				}
+				entry.target_pos_z = 0;
+				entry.target_pos_x = 0;
+				break;
+			}
+			case 3: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					entry.target_pos_z = read_int32();
+					entry.target_pos_x = read_int32();
+					entry.target_pos_d = read_int32();
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					entry.target_pos_z = read_int24();
+					entry.target_pos_x = read_int24();
+					entry.target_pos_d = read_int24();
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					entry.target_pos_z = read_int16();
+					entry.target_pos_x = read_int16();
+					entry.target_pos_d = read_int16();
+				} else {
+					entry.target_pos_z = 0;
+					entry.target_pos_x = 0;
+					entry.target_pos_d = 0;
+				}
+				break;
+			}
 		}
 
 		if ((flags0 & Z_MULDIV_CHG) != 0) {
@@ -716,14 +776,19 @@ static struct cycle_buffer {
 		}
 
 #ifndef STM32
-		printf("POS:%08d IDX:%04d TA:%02d TP:%08d SZ:%08d SX:%08d SD:%08d DZ:%08d DX:%08d DD:%08d\n",
+		printf("POS:%08d IDX:%04d TA:%02d TZ:%08d TX:%08d TD:%08d SZ:%08d SX:%08d SD:%08d DZ:%08d DX:%08d DD:%08d\n",
 			buf_pos,
 			buf_index,
+
 			current().target_axs,
-			current().target_pos,
+			current().target_pos_z,
+			current().target_pos_x,
+			current().target_pos_d,
+			
 			current().stepper_mul_z,
 			current().stepper_mul_x,
 			current().stepper_mul_d,
+			
 			current().stepper_div_z,
 			current().stepper_div_x,
 			current().stepper_div_d
@@ -737,15 +802,39 @@ static struct cycle_buffer {
 		uint8_t flags0 = push_entry.target_axs;
 		uint8_t flags1 = 0;
 		
-		// always changes, so do not optimize change
-		if ((abs(push_entry.target_pos) >> 23) != 0) {
-			flags1 |= T_32_FLG;
-		} else if ((abs(push_entry.target_pos) >> 15) != 0) {
-			flags1 |= T_24_FLG;
-		} else {
-			flags1 |= T_16_FLG;
+		switch (push_entry.target_axs) {
+			case 0: {
+				if ((abs(push_entry.target_pos_z) >> 23) != 0) {
+					flags1 |= T_32_FLG;
+				} else if ((abs(push_entry.target_pos_z) >> 15) != 0) {
+					flags1 |= T_24_FLG;
+				} else {
+					flags1 |= T_16_FLG;
+				}
+			} break;
+			case 1: {
+				if ((abs(push_entry.target_pos_x) >> 23) != 0) {
+					flags1 |= T_32_FLG;
+				} else if ((abs(push_entry.target_pos_x) >> 15) != 0) {
+					flags1 |= T_24_FLG;
+				} else {
+					flags1 |= T_16_FLG;
+				}
+			} break;
+			case 2: {
+				if ((abs(push_entry.target_pos_d) >> 23) != 0) {
+					flags1 |= T_32_FLG;
+				} else if ((abs(push_entry.target_pos_d) >> 15) != 0) {
+					flags1 |= T_24_FLG;
+				} else {
+					flags1 |= T_16_FLG;
+				}
+			} break;
+			case 3: {
+				flags1 |= T_32_FLG;
+			} break;
 		}
-
+		
 		if (push_entry.stepper_mul_z != entry.stepper_mul_z ||
 			push_entry.stepper_div_z != entry.stepper_div_z ) {
 			flags0 |= Z_MULDIV_CHG;
@@ -793,12 +882,39 @@ static struct cycle_buffer {
 		buf[buf_len++] = flags0;
 		buf[buf_len++] = flags1;
 
-		if ((flags1 & T_MSK) == T_32_FLG) {
-			write_int32(push_entry.target_pos);
-		} else if ((flags1 & T_MSK) == T_24_FLG) {
-			write_int24(push_entry.target_pos);
-		} else if ((flags1 & T_MSK) == T_16_FLG) {
-			write_int16(push_entry.target_pos);
+		switch (push_entry.target_axs) {
+			case 0: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					write_int32(push_entry.target_pos_z);
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					write_int24(push_entry.target_pos_z);
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					write_int16(push_entry.target_pos_z);
+				}
+			} break;
+			case 1: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					write_int32(push_entry.target_pos_x);
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					write_int24(push_entry.target_pos_x);
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					write_int16(push_entry.target_pos_x);
+				}
+			} break;
+			case 2: {
+				if ((flags1 & T_MSK) == T_32_FLG) {
+					write_int32(push_entry.target_pos_d);
+				} else if ((flags1 & T_MSK) == T_24_FLG) {
+					write_int24(push_entry.target_pos_d);
+				} else if ((flags1 & T_MSK) == T_16_FLG) {
+					write_int16(push_entry.target_pos_d);
+				}
+			} break;
+			case 3: {
+				write_int32(push_entry.target_pos_z);
+				write_int32(push_entry.target_pos_x);
+				write_int32(push_entry.target_pos_d);
+			} break;
 		}
 		
 		if ((flags1 & Z_MULDIV_MSK) == Z_MULDIV_32_FLG) {
@@ -936,13 +1052,33 @@ static inline void reload_cycle() {
 
 	switch(e.target_axs) {
 		case 0: {
-			stepper_end_pos_z = e.target_pos;
+			stepper_end_pos_z = e.target_pos_z;
 		} break;
 		case 1: {
-			stepper_end_pos_x = e.target_pos;
+			stepper_end_pos_x = e.target_pos_x;
 		} break;
 		case 2: {
-			stepper_end_pos_d = e.target_pos;
+			stepper_end_pos_d = e.target_pos_x;
+		} break;
+		case 3: {
+			stepper_end_pos_z = e.target_pos_z;
+			if (stepper_actual_pos_z > stepper_end_pos_z) {
+				stepper_follow_mul_z = -abs(stepper_follow_mul_z);
+			} else {
+				stepper_follow_mul_z = +abs(stepper_follow_mul_z);
+			}
+			stepper_end_pos_x = e.target_pos_x;
+			if (stepper_actual_pos_x > stepper_end_pos_x) {
+				stepper_follow_mul_x = -abs(stepper_follow_mul_x);
+			} else {
+				stepper_follow_mul_x = +abs(stepper_follow_mul_x);
+			}
+			stepper_end_pos_d = e.target_pos_d;
+			if (stepper_actual_pos_d > stepper_end_pos_d) {
+				stepper_follow_mul_d = -abs(stepper_follow_mul_d);
+			} else {
+				stepper_follow_mul_d = +abs(stepper_follow_mul_d);
+			}
 		} break;
 	}
 
@@ -1159,11 +1295,12 @@ void TIM2_IRQHandler(void)
 						return;
 					} break;
 			case    run_mode_cycle: {
-
 						bool do_next_cycle_step = false;
 						switch(stepper_target_axis) {
 							case 0: {
-								if (stepper_follow_mul_z >= 0) {
+								if (stepper_follow_mul_z == 0) {
+									do_next_cycle_step = true;
+								} else if (stepper_follow_mul_z >= 0) {
 									if (stepper_actual_pos_z >= stepper_end_pos_z) {
 										do_next_cycle_step = true;
 									}   
@@ -1174,7 +1311,9 @@ void TIM2_IRQHandler(void)
 								}
 							} break;
 							case 1: {
-								if (stepper_follow_mul_x >= 0) {
+								if (stepper_follow_mul_x == 0) {
+									do_next_cycle_step = true;
+								} else if (stepper_follow_mul_x >= 0) {
 									if (stepper_actual_pos_x >= stepper_end_pos_x) {
 										do_next_cycle_step = true;
 									}
@@ -1185,7 +1324,9 @@ void TIM2_IRQHandler(void)
 								}
 							} break;
 							case 2: {
-								if (stepper_follow_mul_d >= 0) {
+								if (stepper_follow_mul_d == 0) {
+									do_next_cycle_step = true;
+								} else if (stepper_follow_mul_d >= 0) {
 									if (stepper_actual_pos_d >= stepper_end_pos_d) {
 										do_next_cycle_step = true;
 									}
@@ -1193,6 +1334,51 @@ void TIM2_IRQHandler(void)
 									if (stepper_actual_pos_d <= stepper_end_pos_d) {
 										do_next_cycle_step = true;
 									}
+								}
+							} break;
+							case 3: {
+								int32_t collect = 0;
+								if (stepper_follow_mul_z == 0) {
+									collect++;
+								} else if (stepper_follow_mul_z > 0) {
+									if (stepper_actual_pos_z >= stepper_end_pos_z) {
+										stepper_follow_mul_z = 0;
+										collect++;
+									}   
+								} else {
+									if (stepper_actual_pos_z <= stepper_end_pos_z) {
+										stepper_follow_mul_z = 0;
+										collect++;
+									}   
+								}
+								if (stepper_follow_mul_x == 0) {
+									collect++;
+								} else if (stepper_follow_mul_x > 0) {
+									if (stepper_actual_pos_x >= stepper_end_pos_x) {
+										stepper_follow_mul_x = 0;
+										collect++;
+									}   
+								} else {
+									if (stepper_actual_pos_x <= stepper_end_pos_x) {
+										stepper_follow_mul_x = 0;
+										collect++;
+									}   
+								}
+								if (stepper_follow_mul_d == 0) {
+									collect++;
+								} else if (stepper_follow_mul_d > 0) {
+									if (stepper_actual_pos_d >= stepper_end_pos_d) {
+										stepper_follow_mul_d = 0;
+										collect++;
+									}   
+								} else {
+									if (stepper_actual_pos_d <= stepper_end_pos_d) {
+										stepper_follow_mul_d = 0;
+										collect++;
+									}   
+								}
+								if (collect == 3) {
+									do_next_cycle_step = true;
 								}
 							} break;
 						}
@@ -1737,41 +1923,50 @@ static void parse(void) {
                             int32_t gcd_d = gcd(entry.stepper_mul_d, entry.stepper_div_d); entry.stepper_mul_d /= gcd_d; entry.stepper_div_d /= gcd_d;
                             
                             switch(entry.target_axs) {
+								// Z-AXIS move
                                 case 0: {
-                                	entry.target_pos = target_pos_z;
-                                    if (entry.stepper_mul_z > 0 && entry.target_pos <= prev_target_z) {
+                                	entry.target_pos_z = target_pos_z;
+                                    if (entry.stepper_mul_z > 0 && entry.target_pos_z <= prev_target_z) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_z < 0 && entry.target_pos >= prev_target_z) {
+                                    if (entry.stepper_mul_z < 0 && entry.target_pos_z >= prev_target_z) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_z == 0 && entry.target_pos != prev_target_z) {
+                                    if (entry.stepper_mul_z == 0 && entry.target_pos_z != prev_target_z) {
                                         ok_to_run = false;
                                     }
                                 } break;
+								// X-AXIS move
                                 case 1: {
-                                	entry.target_pos = target_pos_x;
-                                    if (entry.stepper_mul_x > 0 && entry.target_pos <= prev_target_x) {
+                                	entry.target_pos_x = target_pos_x;
+                                    if (entry.stepper_mul_x > 0 && entry.target_pos_x <= prev_target_x) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_x < 0 && entry.target_pos >= prev_target_x) {
+                                    if (entry.stepper_mul_x < 0 && entry.target_pos_x >= prev_target_x) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_x == 0 && entry.target_pos != prev_target_x) {
+                                    if (entry.stepper_mul_x == 0 && entry.target_pos_x != prev_target_x) {
                                         ok_to_run = false;
                                     }
                                 } break;
+								// D-AXIS move
                                 case 2: {
-                                	entry.target_pos = target_pos_d;
-                                    if (entry.stepper_mul_d > 0 && entry.target_pos <= prev_target_d) {
+                                	entry.target_pos_d = target_pos_d;
+                                    if (entry.stepper_mul_d > 0 && entry.target_pos_d <= prev_target_d) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_d < 0 && entry.target_pos >= prev_target_d) {
+                                    if (entry.stepper_mul_d < 0 && entry.target_pos_d >= prev_target_d) {
                                         ok_to_run = false;
                                     }
-                                    if (entry.stepper_mul_d == 0 && entry.target_pos != prev_target_d) {
+                                    if (entry.stepper_mul_d == 0 && entry.target_pos_d != prev_target_d) {
                                         ok_to_run = false;
                                     }
+                                } break;
+								// HOMING move
+                                case 3: {
+                                	entry.target_pos_z = target_pos_z;
+                                	entry.target_pos_x = target_pos_x;
+                                	entry.target_pos_d = target_pos_d;
                                 } break;
                             }
                             
