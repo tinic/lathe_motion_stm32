@@ -195,7 +195,7 @@ public:
 	qenc_timer() {
 		thread = std::thread([]() {
 			const int32_t pulses_per_rev = 2880;
-			const int32_t rpm = 500;
+			const int32_t rpm = 5000;
 			const int32_t usecs = int32_t(1000000./((double(rpm)/60.0)*double(pulses_per_rev)));
 			while(1) {
 				std::this_thread::sleep_for(std::chrono::microseconds(usecs));

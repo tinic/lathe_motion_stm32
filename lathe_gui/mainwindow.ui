@@ -20,6 +20,7 @@
 }
 QPlainTextEdit {
 					color:white;
+					font-family: 'Space Mono', monospace;
 }
 QPushButton {
                         color: black;
@@ -910,7 +911,9 @@ POSX: +0000.00</string>
     <item row="0" column="0" colspan="3">
      <widget class="QLabel" name="rawStatusLabel">
       <property name="styleSheet">
-       <string notr="true">color: grey;</string>
+       <string notr="true">color: grey;
+font-family: 'Space Mono', monospace;
+</string>
       </property>
       <property name="text">
        <string>TextLabel</string>
