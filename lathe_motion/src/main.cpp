@@ -653,6 +653,7 @@ static struct cycle_buffer {
 			(uint32_t(buf[buf_pos+0])<<16)|
 			(uint32_t(buf[buf_pos+1])<< 8)|
 			(uint32_t(buf[buf_pos+2])<< 0);
+		buf_pos += 3;
 		
 		entry.wait_for_index_zero = (flags & WAIT_FOR_ZERO) != 0;
 
