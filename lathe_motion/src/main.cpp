@@ -569,113 +569,6 @@ volatile uint32_t *DWT_CYCCNT = (uint32_t *)0xE0001004;
 static void parse(void);
 static void set_current_run_mode(run_mode mode);
 
-#ifdef __cplusplus
-extern "C" {
-#endif  // #ifdef __cplusplus
-
-void HardFault_Handler(void)
-{
-#ifdef STM32
-    for (;;) {
-        LED_PORT->BSRR  = LED_RESET;
-    }
-#endif  // #ifdef STM32
-}
-
-void BusFault_Handler(void)
-{
-#ifdef STM32
-    for (;;) {
-        LED_PORT->BSRR  = LED_RESET;
-    }
-#endif  // #ifdef STM32
-}
-
-void SysTick_Handler(void)
-{
-    absolute_tick++;
-    
-    parse();
-
-#ifdef STM32
-    led_delay_count = ( (led_delay_count + 1) % LED_DELAY_MS );
-    if(led_delay_count == 0) {
-        led_state       = led_state_next;
-        led_state_next  = led_idle;
-    }
-    
-    IWDG->KR  = 0xAAAA;
-
-#else  // #ifdef STM32
-	static int32_t counter = 0;
-	if (++counter == 500) {
-		counter = 0;
-
-		printf("Z:%08d X:%08d D:%08d A:%08d I:%08d T:%08d S:%08d R:%08d\n", 
-			stepper_actual_pos_z, 
-			stepper_actual_pos_x, 
-			stepper_actual_pos_d,
-			
-			absolute_pos,
-			absolute_idx,
-			absolute_tick,
-			
-			stepper_target_axis,
-			
-			current_run_mode
-			
-		);
-	}
-#endif  // #ifdef STM32
-}
-
-void USART1_IRQHandler(void)
-{
-#ifdef STM32
-
-#ifdef STM32F103xB
-    uint8_t in_char = (USART1->DR & 0xFF);
-    buffer_char(in_char);
-#endif  // #ifdef STM32F103xB
-
-#ifdef STM32F767xx
-    uint8_t in_char = (USART1->RDR & 0xFF);
-    buffer_char(in_char);
-#endif  // #ifdef STM32F767xx
-
-#endif  // #ifdef STM32
-}
-
-void EXTI1_IRQHandler(void)
-{
-    // Core critical section, nothing shall happen here
-    __disable_irq();
-
-    int16_t cnt = qep_counter();
-    set_qep_counter(0);
-
-    absolute_pos += cnt;
-
-    if (cnt < 0) {
-        absolute_idx--;
-    } else {
-        absolute_idx++;
-    }
-
-#ifdef STM32
-    EXTI->PR |= EXTI_PR_PR1;
-#endif  // #ifdef STM32
-
-    if (cnt == 2880 || cnt == -2880) {
-        index_zero_occured = 1;
-    }
-
-    static int32_t last_absolute_tick = 0;
-    current_index_delta = abs(absolute_tick - last_absolute_tick);
-    last_absolute_tick = absolute_tick;
-    __enable_irq();
-}
-
 static struct cycle_buffer {
 
 	struct cycle_entry {
@@ -1059,6 +952,130 @@ static inline void reload_cycle() {
 	}
 }
 
+static void set_zero_pos()
+{
+    // Protect against TIM3 IRQ race
+    __disable_irq();
+    absolute_pos = 0;
+    absolute_pos_start_offset = 0;
+    stepper_actual_pos_z = 0;
+    stepper_actual_pos_x = 0;
+    stepper_actual_pos_d = 0;
+    stepper_off_z = 0;
+    stepper_off_x = 0;
+    stepper_off_d = 0;
+    wait_for_index_zero = 1;
+    index_zero_occured = 0;
+    __enable_irq();
+}
+
+#ifdef __cplusplus
+extern "C" {
+#endif  // #ifdef __cplusplus
+
+void HardFault_Handler(void)
+{
+#ifdef STM32
+    for (;;) {
+        LED_PORT->BSRR  = LED_RESET;
+    }
+#endif  // #ifdef STM32
+}
+
+void BusFault_Handler(void)
+{
+#ifdef STM32
+    for (;;) {
+        LED_PORT->BSRR  = LED_RESET;
+    }
+#endif  // #ifdef STM32
+}
+
+void SysTick_Handler(void)
+{
+    absolute_tick++;
+    
+    parse();
+
+#ifdef STM32
+    led_delay_count = ( (led_delay_count + 1) % LED_DELAY_MS );
+    if(led_delay_count == 0) {
+        led_state       = led_state_next;
+        led_state_next  = led_idle;
+    }
+    
+    IWDG->KR  = 0xAAAA;
+
+#else  // #ifdef STM32
+	static int32_t counter = 0;
+	if (++counter == 500) {
+		counter = 0;
+
+		printf("Z:%08d X:%08d D:%08d A:%08d I:%08d T:%08d S:%08d R:%08d\n", 
+			stepper_actual_pos_z, 
+			stepper_actual_pos_x, 
+			stepper_actual_pos_d,
+			
+			absolute_pos,
+			absolute_idx,
+			absolute_tick,
+			
+			stepper_target_axis,
+			
+			current_run_mode
+			
+		);
+	}
+#endif  // #ifdef STM32
+}
+
+void USART1_IRQHandler(void)
+{
+#ifdef STM32
+
+#ifdef STM32F103xB
+    uint8_t in_char = (USART1->DR & 0xFF);
+    buffer_char(in_char);
+#endif  // #ifdef STM32F103xB
+
+#ifdef STM32F767xx
+    uint8_t in_char = (USART1->RDR & 0xFF);
+    buffer_char(in_char);
+#endif  // #ifdef STM32F767xx
+
+#endif  // #ifdef STM32
+}
+
+void EXTI1_IRQHandler(void)
+{
+    // Core critical section, nothing shall happen here
+    __disable_irq();
+
+    int16_t cnt = qep_counter();
+    set_qep_counter(0);
+
+    absolute_pos += cnt;
+
+    if (cnt < 0) {
+        absolute_idx--;
+    } else {
+        absolute_idx++;
+    }
+
+#ifdef STM32
+    EXTI->PR |= EXTI_PR_PR1;
+#endif  // #ifdef STM32
+
+    if (cnt == 2880 || cnt == -2880) {
+        index_zero_occured = 1;
+    }
+
+    static int32_t last_absolute_tick = 0;
+    current_index_delta = abs(absolute_tick - last_absolute_tick);
+    last_absolute_tick = absolute_tick;
+    __enable_irq();
+}
+
 void TIM2_IRQHandler(void)
 {
     static int32_t stepper_dir_z = 0; // direction is undefined by default
@@ -1192,7 +1209,8 @@ void TIM2_IRQHandler(void)
 							__enable_irq();
 							if (cycle_buffer.atend()) {
 								cycle_buffer.reset();
-                                set_current_run_mode(run_mode_none);
+                                reload_cycle();
+                                set_current_run_mode(run_mode_cycle_pause);
                                 return;
                             }
 						}
@@ -1312,23 +1330,6 @@ void TIM3_IRQHandler(void)
 #ifdef __cplusplus
 } // extern "C" {
 #endif  // #ifdef __cplusplus
-
-static void set_zero_pos()
-{
-    // Protect against TIM3 IRQ race
-    __disable_irq();
-    absolute_pos = 0;
-    absolute_pos_start_offset = 0;
-    stepper_actual_pos_z = 0;
-    stepper_actual_pos_x = 0;
-    stepper_actual_pos_d = 0;
-    stepper_off_z = 0;
-    stepper_off_x = 0;
-    stepper_off_d = 0;
-    wait_for_index_zero = 1;
-    index_zero_occured = 0;
-    __enable_irq();
-}
 
 static void maybe_enable_steppers()
 {

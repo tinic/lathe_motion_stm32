@@ -131,10 +131,6 @@ void MainWindow::update()
 
     QTableView *progTableView = findChild<QTableView *>("progTableView");
 
-    int32_t row = int32_t(parser.cycle_index_to_gcode(size_t(local_packet.cycle_index+1)));
-    progTableView->selectRow(row);
-    progTableView->scrollTo(progTableView->currentIndex(), QAbstractItemView::PositionAtCenter);
-
     rawStatusLabel->setText(str);
 
     QPushButton *clearButton = findChild<QPushButton *>("clearButton");
@@ -166,6 +162,11 @@ void MainWindow::update()
         if (local_packet.current_run_mode == run_mode_cycle_pause) {
             pauseButton->setText("RESUME");
         } else {
+
+            int32_t row = int32_t(parser.cycle_index_to_gcode(size_t(local_packet.cycle_index+1)));
+            progTableView->selectRow(row);
+            progTableView->scrollTo(progTableView->currentIndex(), QAbstractItemView::PositionAtCenter);
+
             pauseButton->setText("PAUSE");
         }
 
