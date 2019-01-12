@@ -9,7 +9,7 @@
 #####				  st-flash, stm32flash, stm32loader, openocd, etc.
 #####
 
-BUILDTOOLPATH	= /usr/local/bin
+BUILDTOOLPATH	= /usr/bin
 FLASHTOOLPATH	= /usr/local/bin
 
 ################################################################################
@@ -71,7 +71,7 @@ CFLAGS	+= -Wall
 CFLAGS	+= -fno-common 
 CFLAGS	+= -mthumb 
 CFLAGS	+= -mcpu=$(ARMCPU) 
-CFLAGS	+= -D$(STM32MCU) 
+CFLAGS	+= -DSTM32 -D$(STM32MCU) 
 CFLAGS	+= -g 
 CFLAGS	+= -Wa,-ahlms=$(addprefix $(OBJDIR)/,$(notdir $(<:.c=.lst)))
 CFLAGS	+= $(INCLUDE)
